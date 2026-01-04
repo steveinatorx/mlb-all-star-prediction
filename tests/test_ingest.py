@@ -36,7 +36,31 @@ def test_fetch_player_info():
     df = fetch_player_info()
     assert isinstance(df, pl.DataFrame)
     assert "player_id" in df.columns
+    assert "name_first" in df.columns
+    assert "name_last" in df.columns
+    assert "mlb_debut" in df.columns
     assert len(df) > 0
+
+
+def test_fetch_player_info_with_ids():
+    """Test player info fetching with specific player IDs."""
+    # Test with a known player ID (Jacob deGrom's MLBAM ID)
+    # First get the ID using playerid_lookup
+    try:
+        from pybaseball import playerid_lookup
+        lookup_df = playerid_lookup("degrom", "jacob")
+        if len(lookup_df) > 0:
+            mlbam_id = str(int(lookup_df["key_mlbam"].iloc[0]))
+            df = fetch_player_info([mlbam_id])
+            assert isinstance(df, pl.DataFrame)
+            assert len(df) > 0
+            assert df["player_id"].str.contains(mlbam_id).any()
+            # Check that mlb_debut is in YYYY-MM-DD format
+            if df["mlb_debut"].is_not_null().any():
+                debut_dates = df.filter(pl.col("mlb_debut").is_not_null())["mlb_debut"]
+                assert all(len(d) == 10 for d in debut_dates)  # YYYY-MM-DD format
+    except ImportError:
+        pytest.skip("pybaseball not available for this test")
 
 
 def test_run_ingestion(tmp_path: Path):

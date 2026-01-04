@@ -129,32 +129,183 @@ def fetch_minor_league_pitching(
     return df
 
 
+def get_player_ids_from_mlb_stats(start_year: int, end_year: int) -> list[str]:
+    """
+    Get list of player IDs who played in MLB during the given years.
+    This helps bootstrap the player info fetching process.
+
+    Args:
+        start_year: Starting year
+        end_year: Ending year
+
+    Returns:
+        List of MLBAM player IDs
+    """
+    logger.info(f"Getting player IDs from MLB stats ({start_year}-{end_year})")
+
+    try:
+        from pybaseball import batting_stats_range, pitching_stats_range
+        import pandas as pd
+    except ImportError:
+        logger.warning("pybaseball not available for getting player IDs")
+        return []
+
+    player_ids = set()
+
+    try:
+        # Get batting stats (includes all players who batted)
+        for year in range(start_year, end_year + 1):
+            try:
+                start_date = f"{year}-01-01"
+                end_date = f"{year}-12-31"
+                batting_df = batting_stats_range(start_date, end_date)
+                # Try to get MLBAM ID (key_mlbam) or IDfg
+                if "key_mlbam" in batting_df.columns:
+                    player_ids.update(
+                        batting_df["key_mlbam"].dropna().astype(int).astype(str).tolist()
+                    )
+                elif "IDfg" in batting_df.columns:
+                    # If we only have FanGraphs IDs, we'd need to convert them
+                    # For now, log a warning
+                    logger.warning(
+                        f"Only FanGraphs IDs found for {year}, need conversion to MLBAM"
+                    )
+                logger.info(f"Found {len(batting_df)} batting records for {year}")
+            except Exception as e:
+                logger.warning(f"Error fetching batting stats for {year}: {e}")
+
+        # Get pitching stats (includes all pitchers)
+        for year in range(start_year, end_year + 1):
+            try:
+                start_date = f"{year}-01-01"
+                end_date = f"{year}-12-31"
+                pitching_df = pitching_stats_range(start_date, end_date)
+                # Try to get MLBAM ID (key_mlbam) or IDfg
+                if "key_mlbam" in pitching_df.columns:
+                    player_ids.update(
+                        pitching_df["key_mlbam"]
+                        .dropna()
+                        .astype(int)
+                        .astype(str)
+                        .tolist()
+                    )
+                elif "IDfg" in pitching_df.columns:
+                    logger.warning(
+                        f"Only FanGraphs IDs found for {year}, need conversion to MLBAM"
+                    )
+                logger.info(f"Found {len(pitching_df)} pitching records for {year}")
+            except Exception as e:
+                logger.warning(f"Error fetching pitching stats for {year}: {e}")
+
+        logger.info(f"Found {len(player_ids)} unique player IDs")
+        return list(player_ids)
+
+    except Exception as e:
+        logger.error(f"Error getting player IDs: {e}")
+        return []
+
+
 def fetch_player_info(player_ids: Optional[list[str]] = None) -> pl.DataFrame:
     """
     Fetch player biographical information and MLB debut dates.
 
     Args:
-        player_ids: Optional list of player IDs to fetch. If None, fetch all.
+        player_ids: Optional list of player IDs (MLBAM IDs) to fetch. If None, will need
+                   to get from other sources (e.g., minor league stats).
 
     Returns:
         DataFrame with player info including MLB debut dates
     """
     logger.info("Fetching player information")
 
-    # TODO: Implement actual player info fetching
-    # pybaseball.playerid_reverse_lookup or similar
-    # Critical: Must get MLB debut date to prevent leakage
+    try:
+        from pybaseball import playerid_reverse_lookup
+        import pandas as pd
+    except ImportError:
+        logger.error("pybaseball not available, falling back to mock data")
+        return _get_mock_player_info()
 
-    logger.warning("Using mock player data - implement actual fetching")
+    # If no player IDs provided, try to get them from MLB stats
+    if player_ids is None or len(player_ids) == 0:
+        logger.info("No player IDs provided, attempting to get from MLB stats")
+        # Use a reasonable date range to get player IDs
+        # This will get players who debuted in recent years
+        player_ids = get_player_ids_from_mlb_stats(
+            config.start_year, config.end_year
+        )
+        if len(player_ids) == 0:
+            logger.warning(
+                "Could not get player IDs. Returning mock data. "
+                "You may need to provide player_ids or implement minor league player ID fetching."
+            )
+            return _get_mock_player_info()
 
+    logger.info(f"Fetching info for {len(player_ids)} players")
+
+    try:
+        # Convert player IDs to integers if they're strings (pybaseball expects ints)
+        player_id_ints = []
+        for pid in player_ids:
+            try:
+                player_id_ints.append(int(pid))
+            except (ValueError, TypeError):
+                logger.warning(f"Could not convert player ID to int: {pid}")
+                continue
+
+        if len(player_id_ints) == 0:
+            logger.warning("No valid player IDs to fetch")
+            return _get_mock_player_info()
+
+        # Fetch player info using pybaseball
+        # playerid_reverse_lookup expects MLBAM IDs as integers
+        player_info_df = playerid_reverse_lookup(player_id_ints, key_type="mlbam")
+
+        if len(player_info_df) == 0:
+            logger.warning(
+                f"No player info found for {len(player_id_ints)} IDs. "
+                "They may not be in pybaseball's lookup table."
+            )
+            return _get_mock_player_info()
+
+        # Convert to our schema format
+        # Note: pybaseball returns mlb_played_first (year), not exact date
+        # We'll use year-01-01 as approximate debut date, can refine later
+        result_df = pl.from_pandas(player_info_df).select([
+            pl.col("key_mlbam").cast(pl.String).alias("player_id"),
+            pl.col("name_first").alias("name_first"),
+            pl.col("name_last").alias("name_last"),
+            # Birth date not directly available, would need additional lookup
+            pl.lit(None).alias("birth_date"),
+            # Convert debut year to approximate date (YYYY-01-01)
+            pl.when(pl.col("mlb_played_first").is_not_null())
+            .then(
+                pl.col("mlb_played_first")
+                .cast(pl.Int64)
+                .cast(pl.String)
+                + "-01-01"
+            )
+            .otherwise(None)
+            .alias("mlb_debut"),
+        ])
+
+        logger.info(f"Successfully fetched info for {len(result_df)} players")
+        return result_df
+
+    except Exception as e:
+        logger.error(f"Error fetching player info: {e}")
+        logger.warning("Falling back to mock data")
+        return _get_mock_player_info()
+
+
+def _get_mock_player_info() -> pl.DataFrame:
+    """Return mock player data for testing."""
     mock_data = {
         "player_id": [f"player_{i}" for i in range(100)],
         "name_first": [f"First{i}" for i in range(100)],
         "name_last": [f"Last{i}" for i in range(100)],
-        "birth_date": ["1990-01-01" for _ in range(100)],
+        "birth_date": [None] * 100,  # Not available in mock
         "mlb_debut": ["2020-04-01" for _ in range(100)],
     }
-
     return pl.DataFrame(mock_data)
 
 
