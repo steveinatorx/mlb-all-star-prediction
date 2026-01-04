@@ -47,6 +47,12 @@ experiments/*
 *.cache
 diskcache/
 
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
 # Environment
 .env
 .env.local
