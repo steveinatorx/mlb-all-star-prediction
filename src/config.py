@@ -33,7 +33,13 @@ class ProjectConfig(BaseSettings):
     tables_dir: Path = Field(default=Path("reports/tables"))
 
     # Data collection
-    start_year: int = Field(default=2000, description="Start year for data collection")
+    # Note: FanGraphs API supports minor league stats going back to at least 2005
+    # Chadwick Register provides player IDs back to 1871
+    # MLB stats API (for player ID discovery) only supports 2008+
+    start_year: int = Field(
+        default=2000,
+        description="Start year for data collection. FanGraphs API supports minor league stats from ~2005+, Chadwick Register provides player IDs from 1871+"
+    )
     end_year: int = Field(default=2023, description="End year for data collection")
     min_ip_for_label: float = Field(
         default=50.0, description="Minimum IP in MiLB to be included"

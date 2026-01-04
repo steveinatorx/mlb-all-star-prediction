@@ -127,6 +127,8 @@ pipenv run python -m src.main report
 Configuration is managed in `src/config.py` using Pydantic. Key settings:
 
 - **Data Collection**: `start_year`, `end_year` (default: 2000-2023)
+  - FanGraphs API supports minor league stats from ~2005+
+  - Chadwick Register provides player IDs from 1871+
 - **Train/Test Splits**: `train_end_year`, `val_end_year` (default: 2018, 2020)
 - **Minimum IP**: `min_ip_for_label` (default: 50.0)
 - **Top-K Values**: `top_k_values` (default: [10, 25, 50, 100])
@@ -138,15 +140,18 @@ Override via environment variables or edit `src/config.py`.
 ### 1. Ingestion (`ingest`)
 
 Downloads raw data from external sources:
-- MLB All-Star rosters
-- Minor league pitching statistics
-- Player biographical data (including MLB debut dates)
+- **Player Info**: Chadwick Register via pybaseball (player IDs, MLB debut dates)
+- **Minor League Pitching**: FanGraphs API (stats from ~2005+)
+- **All-Star Rosters**: Lahman database via pybaseball (falls back to mock if unavailable)
 
 **Output**: `data/raw/*.parquet`
 
-**Note**: Currently uses mock data. Implement actual data fetching in `src/ingest.py`:
-- `fetch_all_star_rosters()`: TODO - implement All-Star roster fetching
-- `fetch_minor_league_pitching()`: TODO - implement MiLB stats fetching
+**Data Sources**:
+- **Chadwick Register**: Comprehensive player ID mapping (1871+)
+- **FanGraphs API**: Minor league pitching statistics (~2005+)
+- **MLB Stats API**: Player ID discovery (2008+, optional if using Chadwick Register)
+
+**Note**: All-Star roster fetching may fall back to mock data if Lahman database is unavailable. See `docs/DATA_SOURCES.md` for details.
 - `fetch_player_info()`: TODO - implement player info fetching
 
 ### 2. Dataset Building (`build-dataset`)

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-04
+
+### Added
+- **FanGraphs API integration** for minor league pitching statistics
+  - `src/fetch_milb_fangraphs.py`: Module for fetching MiLB stats from FanGraphs API
+  - Supports minor league stats from ~2005+ (tested back to 2005)
+  - Automatic integration into `fetch_minor_league_pitching()`
+- **Chadwick Register integration** for comprehensive player ID mapping
+  - Uses `chadwick_register()` from pybaseball for player info
+  - Provides MLBAM, FanGraphs, and Baseball Reference IDs
+  - Supports players from 1871+ (much better than MLB stats API's 2008+ limit)
+- **Baseball Reference scraping module** (`src/scrape_milb.py`) - ready when unblocked
+- **MLB Stats API module** (`src/fetch_milb_mlbapi.py`) - for future exploration
+- Enhanced `fetch_player_info()` to include FanGraphs and Baseball Reference IDs
+- Updated `run_ingestion()` to fetch player info first (needed for minor league fetching)
+- Documentation updates in `docs/DATA_SOURCES.md` and `README.md`
+
+### Fixed
+- Fixed `get_player_ids_from_mlb_stats()` to respect 2008+ API limitation
+- Fixed `test_fetch_player_info()` hanging by providing specific player ID
+- Fixed `test_run_ingestion()` hanging by using Chadwick Register directly
+- Improved error handling and fallback logic
+
+### Changed
+- `fetch_player_info()` now uses Chadwick Register by default (faster, more reliable)
+- `run_ingestion()` reordered to fetch player info before minor league stats
+- Updated config documentation to clarify year limitations
+
 ### Added
 - Initial project scaffold with complete data pipeline structure
 - Data ingestion module (`src/ingest.py`) with mock data support

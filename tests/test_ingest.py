@@ -33,7 +33,9 @@ def test_fetch_minor_league_pitching():
 
 def test_fetch_player_info():
     """Test player info fetching returns valid structure."""
-    df = fetch_player_info()
+    # Use a known player ID to avoid triggering expensive MLB stats fetching
+    # Jacob deGrom's MLBAM ID
+    df = fetch_player_info(["594798"])
     assert isinstance(df, pl.DataFrame)
     assert "player_id" in df.columns
     assert "name_first" in df.columns
