@@ -62,6 +62,9 @@ Thumbs.db
 # Blog notes (draft content)
 BLOG_NOTES.md
 
+# Blog post outlines (draft content)
+docs/blog_series/
+
 # Distribution
 dist/
 build/
