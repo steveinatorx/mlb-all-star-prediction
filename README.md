@@ -222,10 +222,18 @@ These rules are enforced in `src/build_dataset.py` via `filter_pre_debut_stats()
 
 ## Evaluation Metrics
 
+### Ranking Metrics (Primary Approach)
 - **PR-AUC**: Precision-Recall Area Under Curve (better for imbalanced data)
 - **ROC-AUC**: Receiver Operating Characteristic AUC
 - **Recall@TopK**: Recall among top K predictions (scouting perspective)
   - How many All-Stars found in top 10/25/50/100 predictions?
+
+### Binary Classification Metrics (Comparison)
+- **Precision/Recall/F1**: Binary classification metrics at optimal threshold
+- Included for comparison to demonstrate evaluation of both approaches
+- See [Ranking vs Binary Classification](docs/RANKING_VS_BINARY_CLASSIFICATION.md) for detailed comparison
+
+**Why Ranking?** Ranking avoids false positives and threshold selection complexity, making it better suited for this imbalanced data problem. See the comparison document for details.
 
 ## Model Interpretation
 

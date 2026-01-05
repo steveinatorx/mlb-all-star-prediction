@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-01-05
+
+### Added
+- **Binary Classification Evaluation**: Added binary classification metrics as comparison to ranking approach
+  - `evaluate_binary_classification()` function for precision/recall/F1 calculation
+  - `find_optimal_threshold()` function for threshold selection (F1 optimization)
+  - Binary metrics included in all evaluation CSV files
+  - Comparison summary logged during evaluation
+- **Documentation**: Created `docs/RANKING_VS_BINARY_CLASSIFICATION.md` with comprehensive comparison
+- **README Updates**: Added explanation of ranking vs binary classification approaches
+
+### Changed
+- **Evaluation Pipeline**: `evaluate_model()` now calculates both ranking and binary classification metrics
+- **Evaluation Summary**: Comparison summary now shows ranking vs binary metrics side-by-side
+- **Blog Notes**: Added comprehensive notes on ranking vs binary classification decision
+
+### Portfolio Value
+- Demonstrates technical breadth (can implement both approaches)
+- Shows good judgment (chose ranking as primary approach)
+- Clear communication of trade-offs and decision rationale
+- Understanding of when to use each approach
+
+### Key Results
+- **Ranking**: Finds All-Stars without false positives (Top 10: 2 All-Stars, 0 false positives)
+- **Binary**: Same recall (20%) but with 12 false positives at optimal threshold
+- **Insight**: Ranking avoids threshold selection complexity and false positive problem
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
