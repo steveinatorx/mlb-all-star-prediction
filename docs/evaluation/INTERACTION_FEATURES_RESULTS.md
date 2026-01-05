@@ -90,6 +90,7 @@ Test set evaluation shows similar patterns, though absolute values are lower (ex
 1. **Feature redundancy**: Some interaction features may be redundant with base features
 2. **Overfitting**: More features can lead to overfitting in ensemble methods
 3. **Tree depth**: Random Forest may not need explicit interactions (learns them implicitly)
+4. **SHAP visualization difference**: Random Forest SHAP plots look significantly different from XGBoost/LightGBM, reflecting that Random Forest uses features differently and doesn't benefit from explicit interaction features
 
 ### Why Logistic Regression Decreased
 
