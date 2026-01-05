@@ -113,7 +113,7 @@ def test_find_optimal_threshold(sample_predictions):
     assert best_threshold <= 1.0
     assert isinstance(results, dict)
     assert "best_threshold" in results
-    assert "best_metric_value" in results
+    assert "best_metrics" in results  # Contains metrics at best threshold
 
 
 def test_find_optimal_threshold_precision(sample_predictions):
