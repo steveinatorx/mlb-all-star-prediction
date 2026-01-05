@@ -168,24 +168,26 @@ def create_progression_features(
     )
 
     # Age at debut (if available)
-    age_at_debut_df = players_df.select(["player_id", "birth_date", "mlb_debut"])
+    # Note: birth_date is currently null for all players, so we'll set age_at_debut to null
+    # This feature can be populated later if birth_date data becomes available
+    age_at_debut = players_df.select("player_id").with_columns([
+        pl.lit(None).cast(pl.Float64).alias("age_at_debut")
+    ])
     
-    # Convert string dates to date type if needed
-    if "birth_date" in age_at_debut_df.columns and age_at_debut_df["birth_date"].dtype == pl.String:
-        age_at_debut_df = age_at_debut_df.with_columns(pl.col("birth_date").str.to_date().alias("birth_date"))
-    if "mlb_debut" in age_at_debut_df.columns and age_at_debut_df["mlb_debut"].dtype == pl.String:
-        age_at_debut_df = age_at_debut_df.with_columns(pl.col("mlb_debut").str.to_date().alias("mlb_debut"))
-    
-    age_at_debut = (
-        age_at_debut_df.with_columns(
-            [
-                (
-                    (pl.col("mlb_debut") - pl.col("birth_date")).dt.total_days() / 365.25
-                ).alias("age_at_debut")
-            ]
-        )
-        .select(["player_id", "age_at_debut"])
-    )
+    # TODO: If birth_date becomes available, calculate age like this:
+    # age_at_debut_df = players_df.select(["player_id", "birth_date", "mlb_debut"])
+    # if age_at_debut_df["birth_date"].is_not_null().any():
+    #     age_at_debut = (
+    #         age_at_debut_df
+    #         .filter(pl.col("birth_date").is_not_null() & pl.col("mlb_debut").is_not_null())
+    #         .with_columns([
+    #             ((pl.col("mlb_debut") - pl.col("birth_date")).dt.total_days() / 365.25)
+    #             .alias("age_at_debut")
+    #         ])
+    #         .select(["player_id", "age_at_debut"])
+    #     )
+    #     all_players = age_at_debut_df.select("player_id")
+    #     age_at_debut = all_players.join(age_at_debut, on="player_id", how="left")
 
     # Join all progression features
     progression = highest_level.join(level_counts, on="player_id", how="left").join(
@@ -215,9 +217,13 @@ def create_time_splits(
     # Val: train_end_year < debut <= val_end_year
     # Test: debut > val_end_year or no debut
 
+    # Convert mlb_debut to date if it's a string
+    splits_df = players_df.select(["player_id", "mlb_debut"])
+    if splits_df["mlb_debut"].dtype == pl.String:
+        splits_df = splits_df.with_columns(pl.col("mlb_debut").str.to_date().alias("mlb_debut"))
+
     splits = (
-        players_df.select(["player_id", "mlb_debut"])
-        .with_columns(
+        splits_df.with_columns(
             [
                 pl.when(pl.col("mlb_debut").is_null())
                 .then(pl.lit("test"))
@@ -254,14 +260,60 @@ def engineer_features(output_dir: Optional[Path] = None) -> Path:
     # Load processed data
     data = load_processed_data()
 
+    # Map FanGraphs IDs to MLBAM IDs if needed
+    # Minor league data may use FanGraphs IDs, but labels use MLBAM IDs
+    milb_df = data["minor_league_pitching"]
+    players_df = data["players"]
+    
+    # Check if we need to map IDs
+    milb_ids = set(milb_df["player_id"].unique().to_list())
+    label_ids = set(data["labels"]["player_id"].unique().to_list())
+    
+    if len(milb_ids & label_ids) == 0 and "fangraphs_id" in players_df.columns:
+        logger.info("Mapping FanGraphs IDs to MLBAM IDs for feature engineering")
+        # Create mapping: fangraphs_id -> player_id (MLBAM)
+        id_mapping = players_df.select([
+            pl.col("player_id").alias("mlbam_id"),
+            pl.col("fangraphs_id")
+        ]).filter(
+            pl.col("fangraphs_id").is_not_null()
+        )
+        
+        # Map minor league data to use MLBAM IDs
+        milb_df = milb_df.join(
+            id_mapping,
+            left_on="player_id",
+            right_on="fangraphs_id",
+            how="left"
+        )
+        
+        # Check which columns exist before dropping
+        cols_to_drop = []
+        if "mlbam_id" in milb_df.columns:
+            cols_to_drop.append("mlbam_id")
+        if "fangraphs_id_right" in milb_df.columns:
+            cols_to_drop.append("fangraphs_id_right")
+        elif "fangraphs_id" in milb_df.columns and milb_df.columns.count("fangraphs_id") > 1:
+            # If there are duplicate fangraphs_id columns, drop the right one
+            cols_to_drop.append("fangraphs_id")
+        
+        milb_df = milb_df.with_columns([
+            # Use MLBAM ID if available, otherwise keep FanGraphs ID
+            pl.when(pl.col("mlbam_id").is_not_null())
+            .then(pl.col("mlbam_id"))
+            .otherwise(pl.col("player_id"))
+            .alias("player_id")
+        ])
+        
+        if cols_to_drop:
+            milb_df = milb_df.drop(cols_to_drop)
+        
+        logger.info(f"Mapped {milb_df['player_id'].n_unique()} players to MLBAM IDs")
+
     # Create feature groups
-    career_features = create_career_aggregates(data["minor_league_pitching"])
-    best_season_features = create_best_season_features(
-        data["minor_league_pitching"]
-    )
-    progression_features = create_progression_features(
-        data["minor_league_pitching"], data["players"]
-    )
+    career_features = create_career_aggregates(milb_df)
+    best_season_features = create_best_season_features(milb_df)
+    progression_features = create_progression_features(milb_df, players_df)
 
     # Join all features
     features = (

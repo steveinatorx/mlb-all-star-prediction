@@ -49,6 +49,23 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
     """
     logger.info(f"Fetching All-Star rosters from {start_year} to {end_year}")
 
+    # Try MLB Stats API first (most reliable, full rosters)
+    try:
+        from data_fetch.fetch_all_star_mlb_api import fetch_all_star_rosters_mlb_api
+        
+        logger.info("Attempting to fetch full All-Star rosters from MLB Stats API")
+        mlb_api_df = fetch_all_star_rosters_mlb_api(start_year, end_year)
+        
+        if len(mlb_api_df) > 0:
+            logger.info(f"Successfully fetched {len(mlb_api_df)} All-Star records from MLB API")
+            return mlb_api_df
+        else:
+            logger.warning("MLB API returned no All-Star records")
+    except ImportError:
+        logger.debug("MLB API module not available")
+    except Exception as e:
+        logger.warning(f"Error fetching from MLB API: {e}")
+
     # Try extracting from all_star_game_logs (works when all_star_full fails)
     try:
         from pybaseball import all_star_game_logs, chadwick_register
@@ -69,27 +86,45 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
         ]
         
         if len(game_logs_df) > 0:
-            # Extract all player ID columns (position players, pitchers, etc.)
-            player_id_cols = [
+            # Extract only PITCHER IDs (filter out position players)
+            # Pitchers are in specific columns: starting_pitcher, winning_pitcher, losing_pitcher, save_pitcher
+            # Also check lineup positions where pos=1 (pitcher)
+            pitcher_id_cols = [
                 col for col in game_logs_df.columns 
-                if col.endswith('_id') and ('visiting_' in col or 'home_' in col)
+                if col.endswith('_id') and (
+                    'pitcher' in col.lower() or  # starting_pitcher_id, winning_pitcher_id, etc.
+                    col in ['visiting_1_id', 'home_1_id']  # Position 1 is pitcher
+                )
             ]
             
-            # Collect all unique player IDs by year
+            # Collect unique pitcher IDs by year
             all_star_players = []
             for _, row in game_logs_df.iterrows():
                 year = int(row['year']) if pd.notna(row['year']) else None
                 if year is None:
                     continue
                 
-                # Get all player IDs from this game
-                player_ids = [
-                    str(row[col]).strip() 
-                    for col in player_id_cols 
-                    if pd.notna(row.get(col)) and str(row[col]).strip() != ''
-                ]
+                # Get pitcher IDs from this game
+                pitcher_ids = []
+                for col in pitcher_id_cols:
+                    pid = row.get(col)
+                    if pd.notna(pid) and str(pid).strip() != '':
+                        pitcher_ids.append(str(pid).strip())
                 
-                for pid in player_ids:
+                # Also check lineup positions - only include if position is 1 (pitcher)
+                for pos_num in range(1, 10):
+                    for team_prefix in ['visiting_', 'home_']:
+                        id_col = f"{team_prefix}{pos_num}_id"
+                        pos_col = f"{team_prefix}{pos_num}_pos"
+                        if id_col in game_logs_df.columns and pos_col in game_logs_df.columns:
+                            pid = row.get(id_col)
+                            pos = row.get(pos_col)
+                            # Position 1 = pitcher
+                            if pd.notna(pid) and pd.notna(pos) and int(pos) == 1:
+                                pitcher_ids.append(str(pid).strip())
+                
+                # Deduplicate and add to list
+                for pid in set(pitcher_ids):
                     all_star_players.append({
                         'player_id_retro': pid,
                         'season': year
