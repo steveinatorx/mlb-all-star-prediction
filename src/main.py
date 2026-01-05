@@ -17,6 +17,8 @@ from src.train_advanced import (
 )
 from src.analyze_shap_interactions import analyze_model_interactions
 from src.create_interaction_features import add_interaction_features_to_pipeline
+from src.tune import tune_all_models
+from src.evaluation_metrics import generate_all_evaluation_metrics
 
 # Configure logging
 logger.remove()
@@ -203,6 +205,52 @@ def add_interactions(
         output_path=output_path,
     )
     logger.info(f"Features with interactions saved to: {result_path}")
+
+
+@app.command()
+def tune(
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to features file"
+    ),
+    output_dir: Path = typer.Option(
+        None, "--output-dir", help="Output directory for tuning results"
+    ),
+    n_trials: int = typer.Option(
+        50, "--n-trials", help="Number of trials per model"
+    ),
+    use_smote: bool = typer.Option(
+        True, "--use-smote/--no-smote", help="Use SMOTE oversampling"
+    ),
+) -> None:
+    """Tune hyperparameters using Optuna Bayesian optimization."""
+    logger.info("Starting hyperparameter tuning")
+    tune_all_models(
+        features_path=features_path,
+        output_dir=output_dir,
+        n_trials=n_trials,
+        use_smote=use_smote,
+    )
+    logger.info("Hyperparameter tuning complete")
+
+
+@app.command("eval-metrics")
+def eval_metrics(
+    model_path: Path = typer.Option(..., "--model-path", help="Path to trained model"),
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to features file"
+    ),
+    split: str = typer.Option(
+        "test", "--split", help="Split to evaluate on (train/val/test)"
+    ),
+) -> None:
+    """Generate additional evaluation metrics: learning curves, calibration curves, permutation importance, partial dependence plots."""
+    logger.info("Generating additional evaluation metrics")
+    generate_all_evaluation_metrics(
+        model_path=model_path,
+        features_path=features_path,
+        split=split,
+    )
+    logger.info("Evaluation metrics generation complete")
 
 
 if __name__ == "__main__":

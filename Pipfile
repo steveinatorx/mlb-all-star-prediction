@@ -30,6 +30,9 @@ selenium = ">=4.15.0"
 webdriver-manager = ">=4.0.0"
 html5lib = ">=1.1"
 imbalanced-learn = "*"
+optuna = "*"
+plotly = "*"
+kaleido = "*"
 
 [dev-packages]
 black = ">=23.0.0"
