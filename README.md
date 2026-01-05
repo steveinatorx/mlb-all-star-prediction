@@ -1,20 +1,25 @@
 # From MiLB to MLB All-Star: Predicting Pitcher Stardom from Minor League Data
 
-A machine learning project to predict whether minor league pitchers will become MLB All-Stars using historical data and careful feature engineering.
+A comprehensive machine learning project that predicts whether minor league pitchers will become MLB All-Stars using historical data, advanced feature engineering, and model interpretability techniques.
 
 ## Project Overview
 
-This project builds a predictive model to identify future MLB All-Star pitchers based solely on their minor league performance data. The key challenge is predicting rare events (All-Stars) while avoiding label leakage by only using pre-MLB debut statistics.
+This project builds predictive models to identify future MLB All-Star pitchers based solely on their pre-debut minor league performance data. The project demonstrates expertise in handling imbalanced data, feature engineering, model interpretability, and evaluation of both ranking and binary classification approaches.
+
+**Key Challenge**: Predicting rare events (All-Stars represent ~2% of players) while avoiding label leakage by only using pre-MLB debut statistics.
 
 ### Key Features
 
-- **Robust Data Pipeline**: Reproducible ingestion, cleaning, and feature engineering
-- **Leakage Prevention**: Strict rules to only use pre-debut minor league stats
-- **Time-Aware Splits**: Train on earlier years, validate/test on later years
-- **Multiple Models**: Logistic Regression (interpretable), Random Forest, XGBoost, LightGBM
-- **Model Interpretation**: SHAP values, coefficient analysis, feature importance
-- **Evaluation Metrics**: PR-AUC, ROC-AUC, Recall@TopK (scouting-focused)
-- **Blog-Ready Outputs**: Charts, tables, and markdown reports
+- **Robust Data Pipeline**: Reproducible ingestion, cleaning, and feature engineering with real baseball data
+- **Leakage Prevention**: Strict rules to only use pre-debut minor league stats (enforced via schema validation)
+- **Time-Aware Splits**: Train on earlier years (2005-2018), validate (2019-2020), test (2021-2023)
+- **Multiple Models**: Logistic Regression, Random Forest, XGBoost, LightGBM, GAM
+- **Advanced Techniques**: SMOTE oversampling, class weights for imbalanced data
+- **Feature Engineering**: Career aggregates, best-season stats, progression features, interaction features (30 total)
+- **Model Interpretation**: SHAP values (summary, waterfall, dependence plots), coefficient analysis, feature importance
+- **Comprehensive Evaluation**: Ranking metrics (PR-AUC, ROC-AUC, Recall@TopK) and binary classification comparison
+- **Feature Interactions**: SHAP-based interaction analysis and engineered interaction features
+- **Production-Ready**: CLI interface, configuration management, comprehensive documentation
 
 ## Technology Stack
 
@@ -122,9 +127,12 @@ All commands can also be run directly:
 pipenv run python -m src.main ingest
 pipenv run python -m src.main build-dataset
 pipenv run python -m src.main featurize
-pipenv run python -m src.main train
-pipenv run python -m src.main evaluate
-pipenv run python -m src.main report
+pipenv run python -m src.main train              # Baseline models
+pipenv run python -m src.main train-advanced     # Advanced (SMOTE + class weights)
+pipenv run python -m src.main evaluate            # Evaluate models
+pipenv run python -m src.main analyze-interactions --model-path experiments/advanced/random_forest_advanced.joblib
+pipenv run python -m src.main add-interactions    # Add interaction features
+pipenv run python -m src.main report              # Generate report
 ```
 
 ### Configuration
@@ -172,33 +180,54 @@ Cleans, validates, and labels the data:
 ### 3. Feature Engineering (`featurize`)
 
 Creates model-ready features:
-- Career aggregates (total IP, career ERA, WHIP, K/9, BB/9)
-- Best season stats (best ERA, best WHIP, best K/9)
-- Progression features (highest level, seasons at AAA/AA, age at debut)
-- Time-based train/val/test splits
+- **Career aggregates**: Total IP, career ERA, WHIP, K/9, BB/9
+- **Best season stats**: Best ERA, best WHIP, best K/9
+- **Progression features**: Highest level reached, seasons at AAA/AA, age at debut
+- **Draft information**: Draft year, round, position (when available)
+- **Time-based splits**: Train/val/test splits based on MLB debut year
 
 **Output**: `data/features/features.parquet`
 
+**Additional**: Interaction features can be added via `add-interactions` command:
+- K/BB ratios, ERA×WHIP products, consistency metrics
+- See `src/create_interaction_features.py` for details
+
 ### 4. Model Training (`train`)
 
-Trains multiple models:
-- Logistic Regression (with L2 regularization)
+Trains multiple baseline models:
+- Logistic Regression (with L2 regularization, median imputation)
 - Random Forest
 - XGBoost
-- LightGBM (if available)
-- GAM (optional, if available)
+- LightGBM
+- GAM (Generalized Additive Model)
+
+**Advanced Training** (`train-advanced`):
+- SMOTE oversampling for imbalanced data
+- Class weights (inverse frequency)
+- Proper preprocessing order: Impute → SMOTE → Scale → Train
 
 **Output**: `experiments/*.joblib` (models), `experiments/training_results.json`
 
 ### 5. Evaluation (`evaluate`)
 
-Evaluates models and generates:
-- Metrics: PR-AUC, ROC-AUC, Recall@TopK
-- Plots: Precision-Recall curves, ROC curves
-- SHAP plots (for tree-based models)
-- Coefficient plots (for logistic regression)
+Evaluates models and generates comprehensive metrics and visualizations:
+
+**Metrics**:
+- Ranking: PR-AUC, ROC-AUC, Recall@TopK (Top 10, 25, 50, 100)
+- Binary Classification: Precision, Recall, F1 at optimal threshold (for comparison)
+
+**Plots**:
+- Precision-Recall curves, ROC curves
+- SHAP summary plots (feature importance)
+- SHAP waterfall plots (individual prediction explanations)
+- SHAP dependence plots (feature interactions)
+- Coefficient plots (logistic regression)
 
 **Output**: `reports/figures/*.png`, `reports/tables/*.csv`
+
+**Additional Analysis** (`analyze-interactions`):
+- SHAP-based feature interaction analysis
+- Generates markdown reports with interaction suggestions
 
 ### 6. Report Generation (`report`)
 
@@ -237,9 +266,21 @@ These rules are enforced in `src/build_dataset.py` via `filter_pre_debut_stats()
 
 ## Model Interpretation
 
-- **Logistic Regression**: Coefficients, p-values, confidence intervals
-- **Tree Models**: SHAP values for feature importance and individual predictions
-- **All Models**: Feature importance plots, permutation importance
+Comprehensive interpretability tools:
+
+- **SHAP Values**: 
+  - Summary plots (feature importance ranking)
+  - Waterfall plots (individual prediction breakdowns)
+  - Dependence plots (feature interactions)
+  - See [SHAP Analysis Guide](docs/SHAP_ANALYSIS.md) for details
+
+- **Logistic Regression**: Coefficients, coefficient plots
+
+- **Tree Models**: SHAP values, tree-based feature importance
+
+- **Feature Interactions**: SHAP-based interaction analysis to identify and create interaction features
+
+- **Ranking vs Binary Classification**: Comprehensive comparison of evaluation approaches (see [docs/RANKING_VS_BINARY_CLASSIFICATION.md](docs/RANKING_VS_BINARY_CLASSIFICATION.md))
 
 ## Testing
 
@@ -269,15 +310,15 @@ make format    # Format code (black, ruff --fix)
 3. Add tests in `tests/`
 4. Update documentation
 
-## Blog Series
+## Documentation
 
-Outlines for 5 Medium posts are in `docs/blog_series/`:
+Comprehensive documentation available in `docs/`:
 
-1. **Framing + Data Sources + Leakage Rules**
-2. **Data Engineering Pipeline + Schema + Validation**
-3. **Feature Engineering + EDA Findings**
-4. **Statistical Significance + Interpretable Modeling**
-5. **XGBoost + Ranking + SHAP + Takeaways**
+- **[SHAP Analysis Guide](docs/SHAP_ANALYSIS.md)**: Understanding SHAP values, interpretation, and implementation
+- **[Ranking vs Binary Classification](docs/RANKING_VS_BINARY_CLASSIFICATION.md)**: Comparison of evaluation approaches
+- **[Evaluation Metrics Explanation](docs/EVALUATION_METRICS_EXPLANATION.md)**: Why PR-AUC/ROC-AUC over F1 score
+- **[Model Training Plan](docs/MODEL_TRAINING_PLAN.md)**: Training strategy and roadmap
+- **[Roadmap](docs/ROADMAP.md)**: Project roadmap and next steps
 
 ## Data Sources
 
@@ -306,21 +347,40 @@ Polars is chosen over pandas for:
 - **Tables**: `reports/tables/*.csv`
 - **Reports**: `reports/experiment_report.md`
 
+## Current Dataset
+
+- **2,471 players** with minor league pitching data (2005+ debuts)
+- **50 All-Stars** (2.02% positive rate)
+- **30 features** (20 base + 10 interaction features)
+- **Train/Val/Test splits**: 2005-2018 / 2019-2020 / 2021-2023
+
+## Model Performance
+
+**Baseline Models**:
+- Random Forest: PR-AUC 0.0366, ROC-AUC 0.6996
+- XGBoost: PR-AUC 0.0453, ROC-AUC 0.7193
+- LightGBM: PR-AUC 0.0549, ROC-AUC 0.6855
+
+**Advanced Models** (with SMOTE + class weights):
+- Random Forest: PR-AUC 0.0929 (+154% improvement)
+- XGBoost: PR-AUC 0.0946 (+109% improvement)
+- LightGBM: PR-AUC 0.0629 (+14.5% improvement)
+
 ## Limitations
 
-- Currently uses mock data (implement actual data fetching)
-- Limited feature set (can add velocity, spin rate, pitch mix if available)
-- Class imbalance (All-Stars are rare)
-- Incomplete historical data (especially older years)
+- **Class imbalance**: All-Stars are rare (~2% of players)
+- **Limited scope**: Only US minor league pitchers (2005+ debuts)
+- **Missing data**: Some All-Stars don't have minor league data (foreign leagues, international signings)
+- **Feature limitations**: No velocity, spin rate, or pitch mix data (would require Statcast)
 
 ## Future Work
 
-- Implement actual data fetching from pybaseball/other sources
-- Add velocity and spin rate features
-- Include pitch mix information
-- Model time-to-All-Star (survival analysis)
-- Include organizational factors
-- Add more sophisticated feature engineering
+- **Hyperparameter tuning**: Bayesian optimization with Optuna
+- **Ensemble methods**: Voting, stacking, blending
+- **Additional features**: Velocity, spin rate, pitch mix (if Statcast data available)
+- **Data expansion**: Foreign leagues (NPB, KBO), college baseball
+- **Time-to-All-Star**: Survival analysis for time-to-event prediction
+- **Organizational factors**: Team, coaching, development system features
 
 ## License
 
