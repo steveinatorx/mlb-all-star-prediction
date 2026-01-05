@@ -42,6 +42,17 @@ class MinorLeaguePitchingSeasonSchema(BaseModel):
     losses: int = Field(ge=0)
     saves: int = Field(ge=0)
 
+    # Expanded stats (from MiLB.com expanded view or FanGraphs)
+    total_batters_faced: Optional[int] = Field(default=None, ge=0, description="TBF - Total Batters Faced")
+    pitches: Optional[int] = Field(default=None, ge=0, description="NP - Number of Pitches")
+    pitches_per_ip: Optional[float] = Field(default=None, ge=0.0, description="P/IP - Pitches per Inning Pitched")
+    quality_starts: Optional[int] = Field(default=None, ge=0, description="QS - Quality Starts")
+    quality_finish: Optional[int] = Field(default=None, ge=0, description="QF - Quality Finish")
+    holds: Optional[int] = Field(default=None, ge=0, description="HLD - Holds")
+    intentional_walks: Optional[int] = Field(default=None, ge=0, description="IBB - Intentional Walks")
+    wild_pitches: Optional[int] = Field(default=None, ge=0, description="WP - Wild Pitches")
+    balks: Optional[int] = Field(default=None, ge=0, description="BK - Balks")
+
     # Derived fields (computed in data processing, not validated here)
     era: Optional[float] = Field(default=None, ge=0.0)
     whip: Optional[float] = Field(default=None, ge=0.0)

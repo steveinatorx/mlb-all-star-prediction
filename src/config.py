@@ -36,9 +36,10 @@ class ProjectConfig(BaseSettings):
     # Note: FanGraphs API supports minor league stats going back to at least 2005
     # Chadwick Register provides player IDs back to 1871
     # MLB stats API (for player ID discovery) only supports 2008+
+    # Project focuses on 2005+ debuts for full data coverage
     start_year: int = Field(
-        default=2000,
-        description="Start year for data collection. FanGraphs API supports minor league stats from ~2005+, Chadwick Register provides player IDs from 1871+"
+        default=2005,
+        description="Start year for data collection. Set to 2005+ for full FanGraphs API coverage. FanGraphs API supports minor league stats from ~2005+, Chadwick Register provides player IDs from 1871+"
     )
     end_year: int = Field(default=2023, description="End year for data collection")
     min_ip_for_label: float = Field(

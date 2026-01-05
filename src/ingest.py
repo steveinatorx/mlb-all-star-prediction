@@ -1,6 +1,7 @@
 """Data ingestion module for pulling raw baseball data."""
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,8 @@ from loguru import logger
 from pybaseball import cache
 
 from src.config import config
+from src.ingest_tracker import IngestionTracker
+from src.incremental_writer import IncrementalWriter
 
 # Try to import scraping dependencies
 try:
@@ -90,13 +93,56 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
     except Exception as e:
         logger.warning(f"Could not fetch from Lahman database: {e}")
 
-    # Fallback: Try scraping Baseball Reference
-    # TODO: Implement Baseball Reference scraping
-    # For now, return mock data
+    # Try Baseball Reference scraping
+    try:
+        from data_fetch.fetch_all_star import fetch_all_star_rosters_with_mapping
+        
+        logger.info("Attempting to scrape All-Star rosters from Baseball Reference")
+        
+        # Load player info for ID mapping if available
+        player_info_file = config.raw_data_dir / "players.parquet"
+        players_df = None
+        if player_info_file.exists():
+            try:
+                players_df = pl.read_parquet(player_info_file)
+            except Exception:
+                pass
+        
+        bref_df = fetch_all_star_rosters_with_mapping(
+            start_year, end_year, players_df=players_df
+        )
+        
+        if len(bref_df) > 0:
+            logger.info(f"Successfully fetched {len(bref_df)} All-Star records from Baseball Reference")
+            return bref_df
+        else:
+            logger.warning("No All-Star data found from Baseball Reference")
+    except ImportError:
+        logger.debug("Baseball Reference scraping module not available")
+    except Exception as e:
+        logger.warning(f"Error scraping All-Star rosters from Baseball Reference: {e}")
+
+    # Last resort: Check for manual dataset file
+    manual_file = config.raw_data_dir / "all_star_rosters.csv"
+    if manual_file.exists():
+        logger.info(f"Found manual All-Star roster file: {manual_file}")
+        try:
+            manual_df = pl.read_csv(manual_file)
+            # Ensure it has the right columns
+            if "player_id" in manual_df.columns and "season" in manual_df.columns:
+                if "is_all_star" not in manual_df.columns:
+                    manual_df = manual_df.with_columns(pl.lit(True).alias("is_all_star"))
+                logger.info(f"Loaded {len(manual_df)} All-Star records from manual file")
+                return manual_df
+        except Exception as e:
+            logger.warning(f"Could not read manual All-Star file: {e}")
+
+    # Last resort: Return mock data with warning
     logger.warning(
-        "All-Star roster fetching not fully implemented. "
-        "Options: Baseball Reference scraping or MLB Stats API. "
-        "Returning mock data for now."
+        "All-Star roster fetching failed. Using mock data. "
+        "This will need to be replaced with real data for model training. "
+        f"To use real data, create a CSV file at: {manual_file} "
+        "with columns: player_id (MLBAM), season, is_all_star"
     )
     
     # Generate mock data for the requested years
@@ -109,7 +155,12 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
 
 
 def fetch_minor_league_pitching(
-    start_year: int, end_year: int, cache_key: Optional[str] = None
+    start_year: int,
+    end_year: int,
+    cache_key: Optional[str] = None,
+    player_info_path: Optional[Path] = None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    incremental_writer: Optional[IncrementalWriter] = None,
 ) -> pl.DataFrame:
     """
     Fetch minor league pitching statistics.
@@ -131,17 +182,90 @@ def fetch_minor_league_pitching(
             logger.info("Loading from cache")
             return pl.read_parquet(cached) if isinstance(cached, str) else cached
 
-    # Try FanGraphs API first (works well, has minor league data)
+    # Try MiLB.com scraping FIRST (has expanded stats: TBF, NP, P/IP, QS, QF, HLD, IBB, WP, BK)
+    # This is now the primary source since it provides more comprehensive stats
     try:
-        from src.fetch_milb_fangraphs import fetch_minor_league_pitching_batch_fangraphs
+        from data_fetch.fetch_milb_mlbcom import (
+            fetch_minor_league_pitching_batch_mlbcom,
+            calculate_optimal_scraping_range,
+        )
+        
+        logger.info("Attempting to fetch from MiLB.com (league-level scraping - basic stats only)")
+        
+        # Load player info to calculate optimal scraping range
+        player_info_file = player_info_path or (config.raw_data_dir / "players.parquet")
+        optimal_start_year = start_year
+        optimal_end_year = end_year
+        player_ids_set = None
+        
+        if player_info_file.exists():
+            try:
+                player_df = pl.read_parquet(player_info_file)
+                
+                # Calculate optimal scraping range based on player debut dates
+                optimal_start_year, optimal_end_year, player_ids_set = (
+                    calculate_optimal_scraping_range(player_df, min_years_before_debut=5)
+                )
+                
+                # Use the optimal range, but ensure it overlaps with requested range
+                optimal_end_year = min(optimal_end_year, end_year)
+                
+                logger.info(
+                    f"Optimal scraping range: {optimal_start_year} to {optimal_end_year} "
+                    f"for {len(player_ids_set) if player_ids_set else 'all'} players"
+                )
+            except Exception as e:
+                logger.warning(f"Could not calculate optimal range: {e}")
+        
+        # Fetch from MiLB.com with expanded stats enabled (use_expanded=True by default)
+        milb_df = fetch_minor_league_pitching_batch_mlbcom(
+            player_mlbam_ids=None,  # Not needed for league scraping
+            start_year=optimal_start_year,
+            end_year=optimal_end_year,
+            delay=0.6,  # Faster without Selenium
+            use_league_scraping=True,
+            league_slugs=None,  # Use default leagues
+            player_ids_filter=player_ids_set,
+        )
+        
+        if len(milb_df) > 0:
+            # Write incrementally if writer provided
+            if incremental_writer:
+                incremental_writer.write(milb_df.to_dicts())
+                logger.info(f"Wrote {len(milb_df)} records from MiLB.com to incremental writer")
+                return pl.DataFrame()  # Empty - data already written
+            
+            # Cache the results
+            if cache_key and disk_cache:
+                cache_path = config.cache_dir / f"{cache_key}.parquet"
+                milb_df.write_parquet(cache_path)
+                disk_cache.set(
+                    cache_key, str(cache_path), expire=86400 * 7
+                )
+            
+            logger.info(
+                f"Successfully fetched {len(milb_df)} minor league records from MiLB.com (with expanded stats)"
+            )
+            return milb_df
+        else:
+            logger.warning("No minor league stats found via MiLB.com scraping")
+    except ImportError:
+        logger.debug("MiLB.com scraping module not available")
+    except Exception as e:
+        logger.warning(f"MiLB.com scraping failed: {e}")
+
+    # Fallback: Try FanGraphs API (faster but no expanded stats)
+    try:
+        from data_fetch.fetch_milb_fangraphs import fetch_minor_league_pitching_batch_fangraphs
         
         logger.info("Attempting to fetch from FanGraphs API")
         
         # Load player info to get FanGraphs IDs
-        player_info_path = config.raw_data_dir / "players.parquet"
-        if player_info_path.exists():
+        # Use provided path or default to config.raw_data_dir
+        player_info_file = player_info_path or (config.raw_data_dir / "players.parquet")
+        if player_info_file.exists():
             try:
-                player_df = pl.read_parquet(player_info_path)
+                player_df = pl.read_parquet(player_info_file)
                 
                 # Check if we have FanGraphs IDs
                 if "fangraphs_id" in player_df.columns:
@@ -162,8 +286,15 @@ def fetch_minor_league_pitching(
                         
                         # Fetch minor league stats
                         fg_df = fetch_minor_league_pitching_batch_fangraphs(
-                            fg_ids, start_year, end_year, delay=0.6
+                            fg_ids, start_year, end_year, delay=0.6, 
+                            progress_callback=progress_callback,
+                            incremental_writer=incremental_writer,
                         )
+                        
+                        # If using incremental writer, data is already written
+                        if incremental_writer:
+                            logger.info("Data written incrementally to JSONL")
+                            return pl.DataFrame()  # Empty - data already written
                         
                         if len(fg_df) > 0:
                             # Map fangraphs_id back to player_id (MLBAM)
@@ -208,9 +339,12 @@ def fetch_minor_league_pitching(
     except ImportError:
         logger.debug("FanGraphs API module not available")
 
+    # MiLB.com scraping is now handled above as primary source
+    # This duplicate section removed
+
     # Try MLB Stats API as alternative
     try:
-        from src.fetch_milb_mlbapi import fetch_player_minor_league_stats_mlbapi
+        from data_fetch.fetch_milb_mlbapi import fetch_player_minor_league_stats_mlbapi
         logger.debug("MLB Stats API module available")
     except ImportError:
         logger.debug("MLB Stats API module not available")
@@ -218,7 +352,7 @@ def fetch_minor_league_pitching(
     # Try Baseball Reference scraping as fallback
     if SCRAPING_AVAILABLE:
         try:
-            from src.scrape_milb import scrape_minor_league_pitching_batch
+            from data_fetch.scrape_milb import scrape_minor_league_pitching_batch
 
             # Try to get player Baseball Reference IDs and scrape
             logger.info("Attempting to scrape from Baseball Reference")
@@ -292,7 +426,7 @@ def fetch_minor_league_pitching(
                     logger.error(f"Error reading player info or scraping: {e}")
             else:
                 logger.warning(
-                    "Player info file not found. "
+                    f"Player info file not found at {player_info_file}. "
                     "Run fetch_player_info() first to get Baseball Reference IDs for scraping."
                 )
         except ImportError:
@@ -584,6 +718,8 @@ def run_ingestion(
     start_year: Optional[int] = None,
     end_year: Optional[int] = None,
     output_dir: Optional[Path] = None,
+    force: bool = False,
+    max_players: Optional[int] = None,
 ) -> dict[str, Path]:
     """
     Run full data ingestion pipeline.
@@ -592,6 +728,8 @@ def run_ingestion(
         start_year: Starting year (defaults to config)
         end_year: Ending year (defaults to config)
         output_dir: Output directory (defaults to config.raw_data_dir)
+        force: If True, re-fetch data even if files already exist
+        max_players: Optional limit on number of players to fetch (useful for testing)
 
     Returns:
         Dictionary mapping dataset names to file paths
@@ -600,70 +738,256 @@ def run_ingestion(
     end_year = end_year or config.end_year
     output_dir = output_dir or config.raw_data_dir
 
+    # Initialize progress tracker
+    status_file = output_dir / ".ingestion_status.json"
+    tracker = IngestionTracker(status_file)
+    
     logger.info(f"Starting data ingestion: {start_year}-{end_year}")
+    logger.info(f"Progress tracking: {status_file}")
+
+    # Define output file paths
+    player_path = output_dir / "players.parquet"
+    all_star_path = output_dir / "all_star_rosters.parquet"
+    milb_path = output_dir / "minor_league_pitching.parquet"
+    
+    # Start tracking
+    tracker.start_ingestion(start_year, end_year, output_dir, force)
+
+    # Check if files already exist (unless force is True)
+    # Also check tracker for resume capability
+    if not force:
+        existing_files = []
+        if player_path.exists() and tracker.is_step_completed("players"):
+            existing_files.append("players")
+        if all_star_path.exists() and tracker.is_step_completed("all_star_rosters"):
+            existing_files.append("all_star_rosters")
+        if milb_path.exists() and tracker.is_step_completed("minor_league_pitching"):
+            existing_files.append("minor_league_pitching")
+        
+        if existing_files:
+            logger.info(
+                f"Found existing completed data files: {', '.join(existing_files)}. "
+                "Skipping re-fetch. Use --force to re-fetch."
+            )
+            # Return existing files, only fetch missing ones
+            result = {}
+            if player_path.exists() and tracker.is_step_completed("players"):
+                result["players"] = player_path
+            if all_star_path.exists() and tracker.is_step_completed("all_star_rosters"):
+                result["all_star_rosters"] = all_star_path
+            if milb_path.exists() and tracker.is_step_completed("minor_league_pitching"):
+                result["minor_league_pitching"] = milb_path
+            
+            # Fetch any missing files
+            if not player_path.exists() or not tracker.is_step_completed("players"):
+                tracker.mark_step_started("players")
+                logger.info("Fetching missing player info...")
+                # Fetch player info
+                try:
+                    from pybaseball import chadwick_register
+                    register_pd = chadwick_register(save=False)
+                    register_df = pl.from_pandas(register_pd)
+                    debut_window_start = max(start_year - 5, 2005)
+                    filtered_df = register_df.filter(
+                        (pl.col("mlb_played_first").is_not_null()) &
+                        (pl.col("mlb_played_first") >= debut_window_start) &
+                        (pl.col("mlb_played_first") <= end_year)
+                    )
+                    if max_players is not None and len(filtered_df) > max_players:
+                        filtered_df = filtered_df.head(max_players)
+                    player_df = filtered_df.select([
+                        pl.col("key_mlbam").cast(pl.String).alias("player_id"),
+                        pl.col("name_first").alias("name_first"),
+                        pl.col("name_last").alias("name_last"),
+                        pl.lit(None).alias("birth_date"),
+                        pl.when(pl.col("mlb_played_first").is_not_null())
+                        .then(
+                            pl.col("mlb_played_first")
+                            .cast(pl.Int64)
+                            .cast(pl.String)
+                            + "-01-01"
+                        )
+                        .otherwise(None)
+                        .alias("mlb_debut"),
+                        pl.col("key_bbref").cast(pl.String).alias("bbref_id"),
+                        pl.col("key_fangraphs").cast(pl.String).alias("fangraphs_id"),
+                    ])
+                    player_df.write_parquet(player_path)
+                    result["players"] = player_path
+                    tracker.mark_step_completed("players", player_path)
+                except Exception as e:
+                    logger.error(f"Could not fetch player info: {e}")
+                    tracker.mark_step_failed("players", str(e))
+            
+            if not all_star_path.exists() or not tracker.is_step_completed("all_star_rosters"):
+                tracker.mark_step_started("all_star_rosters")
+                logger.info("Fetching missing All-Star rosters...")
+                try:
+                    all_star_df = fetch_all_star_rosters(start_year, end_year)
+                    all_star_df.write_parquet(all_star_path)
+                    result["all_star_rosters"] = all_star_path
+                    tracker.mark_step_completed("all_star_rosters", all_star_path)
+                except Exception as e:
+                    logger.error(f"Could not fetch All-Star rosters: {e}")
+                    tracker.mark_step_failed("all_star_rosters", str(e))
+            
+            if not milb_path.exists() or not tracker.is_step_completed("minor_league_pitching"):
+                tracker.mark_step_started("minor_league_pitching")
+                logger.info("Fetching missing minor league pitching...")
+                try:
+                    milb_df = fetch_minor_league_pitching(
+                        start_year,
+                        end_year,
+                        cache_key=f"milb_pitching_{start_year}_{end_year}",
+                        player_info_path=player_path if player_path.exists() else None,
+                    )
+                    milb_df.write_parquet(milb_path)
+                    result["minor_league_pitching"] = milb_path
+                    tracker.mark_step_completed("minor_league_pitching", milb_path)
+                except Exception as e:
+                    logger.error(f"Could not fetch minor league pitching: {e}")
+                    tracker.mark_step_failed("minor_league_pitching", str(e))
+            
+            tracker.finish_ingestion()
+            return result
 
     # Fetch player info FIRST (needed for minor league fetching)
-    logger.info("Step 1: Fetching player information")
-    # Use Chadwick Register directly - it's faster and more reliable than MLB stats API
-    # Filter by players who debuted in our year range
-    try:
-        from pybaseball import chadwick_register
-        import pandas as pd
-        
-        logger.info("Loading Chadwick Register...")
-        register_pd = chadwick_register(save=False)
-        register_df = pl.from_pandas(register_pd)
-        
-        # Filter to players who debuted in our range (or before, to catch minor league data)
-        # We want players who could have minor league stats in our range
-        player_df = register_df.filter(
-            (pl.col("mlb_played_first").is_not_null()) &
-            (pl.col("mlb_played_first") <= end_year)
-        ).select([
-            pl.col("key_mlbam").cast(pl.String).alias("player_id"),
-            pl.col("name_first").alias("name_first"),
-            pl.col("name_last").alias("name_last"),
-            pl.lit(None).alias("birth_date"),
-            pl.when(pl.col("mlb_played_first").is_not_null())
-            .then(
-                pl.col("mlb_played_first")
-                .cast(pl.Int64)
-                .cast(pl.String)
-                + "-01-01"
+    step_name = "players"
+    if not tracker.is_step_completed(step_name):
+        tracker.mark_step_started(step_name)
+        logger.info("Step 1: Fetching player information")
+        # Use Chadwick Register directly - it's faster and more reliable than MLB stats API
+        # Filter by players who debuted in our year range
+        try:
+            from pybaseball import chadwick_register
+            import pandas as pd
+            
+            logger.info("Loading Chadwick Register...")
+            register_pd = chadwick_register(save=False)
+            register_df = pl.from_pandas(register_pd)
+            
+            # Filter to players who debuted in a reasonable window
+            # We want players who:
+            # 1. Debuted in MLB (for labeling)
+            # 2. Could have minor league stats in our year range
+            # Strategy: Include players who debuted between (start_year - 5) and end_year
+            # This captures players who had MiLB stats in our range before their debut
+            debut_window_start = max(start_year - 5, 2005)  # Don't go before 2005 (FanGraphs limit)
+            filtered_df = register_df.filter(
+                (pl.col("mlb_played_first").is_not_null()) &
+                (pl.col("mlb_played_first") >= debut_window_start) &
+                (pl.col("mlb_played_first") <= end_year)
             )
-            .otherwise(None)
-            .alias("mlb_debut"),
-            pl.col("key_bbref").cast(pl.String).alias("bbref_id"),
-            pl.col("key_fangraphs").cast(pl.String).alias("fangraphs_id"),
-        ])
+            
+            # Limit number of players if specified (useful for testing)
+            if max_players is not None and len(filtered_df) > max_players:
+                logger.info(f"Limiting to {max_players} players (for testing)")
+                filtered_df = filtered_df.head(max_players)
+            
+            player_df = filtered_df.select([
+                pl.col("key_mlbam").cast(pl.String).alias("player_id"),
+                pl.col("name_first").alias("name_first"),
+                pl.col("name_last").alias("name_last"),
+                pl.lit(None).alias("birth_date"),
+                pl.when(pl.col("mlb_played_first").is_not_null())
+                .then(
+                    pl.col("mlb_played_first")
+                    .cast(pl.Int64)
+                    .cast(pl.String)
+                    + "-01-01"
+                )
+                .otherwise(None)
+                .alias("mlb_debut"),
+                pl.col("key_bbref").cast(pl.String).alias("bbref_id"),
+                pl.col("key_fangraphs").cast(pl.String).alias("fangraphs_id"),
+            ])
+            
+            logger.info(f"Loaded {len(player_df)} players from Chadwick Register")
+        except Exception as e:
+            logger.warning(f"Could not load Chadwick Register: {e}. Falling back to fetch_player_info()")
+            player_df = fetch_player_info()
         
-        logger.info(f"Loaded {len(player_df)} players from Chadwick Register")
-    except Exception as e:
-        logger.warning(f"Could not load Chadwick Register: {e}. Falling back to fetch_player_info()")
-        player_df = fetch_player_info()
-    
-    player_path = output_dir / "players.parquet"
-    player_df.write_parquet(player_path)
-    logger.info(f"Saved player info to {player_path}")
+        player_df.write_parquet(player_path)
+        logger.info(f"Saved player info to {player_path}")
+        tracker.mark_step_completed(step_name, player_path)
+    else:
+        logger.info(f"Step 1: Skipping (already completed)")
+        player_df = pl.read_parquet(player_path)
 
     # Fetch All-Star rosters
-    logger.info("Step 2: Fetching All-Star rosters")
-    all_star_df = fetch_all_star_rosters(start_year, end_year)
-    all_star_path = output_dir / "all_star_rosters.parquet"
-    all_star_df.write_parquet(all_star_path)
-    logger.info(f"Saved All-Star rosters to {all_star_path}")
+    step_name = "all_star_rosters"
+    if not tracker.is_step_completed(step_name):
+        tracker.mark_step_started(step_name)
+        logger.info("Step 2: Fetching All-Star rosters")
+        try:
+            all_star_df = fetch_all_star_rosters(start_year, end_year)
+            all_star_df.write_parquet(all_star_path)
+            logger.info(f"Saved All-Star rosters to {all_star_path}")
+            tracker.mark_step_completed(step_name, all_star_path)
+        except Exception as e:
+            logger.error(f"Failed to fetch All-Star rosters: {e}")
+            tracker.mark_step_failed(step_name, str(e))
+            raise
+    else:
+        logger.info(f"Step 2: Skipping (already completed)")
 
     # Fetch minor league pitching (now that we have player info with FanGraphs IDs)
-    logger.info("Step 3: Fetching minor league pitching stats")
-    milb_df = fetch_minor_league_pitching(
-        start_year, end_year, cache_key=f"milb_pitching_{start_year}_{end_year}"
-    )
-    milb_path = output_dir / "minor_league_pitching.parquet"
-    milb_df.write_parquet(milb_path)
-    logger.info(f"Saved MiLB pitching to {milb_path}")
+    step_name = "minor_league_pitching"
+    if not tracker.is_step_completed(step_name):
+        tracker.mark_step_started(step_name)
+        logger.info("Step 3: Fetching minor league pitching stats")
+        logger.info("This may take 30-60 minutes depending on number of players...")
+        try:
+            # Progress callback for tracking
+            def progress_callback(current: int, total: int, player_id: str) -> None:
+                if current > 0 and current % 50 == 0:
+                    pct = (current / total) * 100
+                    tracker.update_progress(
+                        step_name,
+                        {
+                            "current": current,
+                            "total": total,
+                            "percent": pct,
+                            "current_player": player_id,
+                        },
+                    )
+            
+            # Use incremental writer for resilience
+            incremental_writer = IncrementalWriter(milb_path, batch_size=50)
+            
+            milb_df = fetch_minor_league_pitching(
+                start_year,
+                end_year,
+                cache_key=f"milb_pitching_{start_year}_{end_year}",
+                player_info_path=player_path,
+                progress_callback=progress_callback,
+                incremental_writer=incremental_writer,
+            )
+            
+            # Finalize: convert JSONL to Parquet
+            final_path = incremental_writer.finalize()
+            record_count = incremental_writer.get_current_count()
+            logger.info(f"Saved MiLB pitching to {final_path} ({record_count} records)")
+            tracker.mark_step_completed(step_name, final_path)
+        except Exception as e:
+            logger.error(f"Failed to fetch minor league pitching: {e}")
+            tracker.mark_step_failed(step_name, str(e))
+            raise
+    else:
+        logger.info(f"Step 3: Skipping (already completed)")
 
     # Add small delay to avoid rate limiting
     time.sleep(1)
+    
+    tracker.finish_ingestion()
+    
+    # Print summary
+    summary = tracker.get_progress_summary()
+    logger.info("=" * 70)
+    logger.info("INGESTION COMPLETE")
+    logger.info("=" * 70)
+    logger.info(f"Completed steps: {', '.join(summary['completed_steps'])}")
+    logger.info(f"Status file: {status_file}")
 
     return {
         "all_star_rosters": all_star_path,

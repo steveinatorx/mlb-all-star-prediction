@@ -18,7 +18,7 @@ logger.remove()
 logger.add(
     lambda msg: print(msg, end=""),
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level=config.log_level,
+    level=getattr(config, 'log_level', 'INFO'),
 )
 
 app = typer.Typer(help="MLB All-Star Prediction CLI")
@@ -35,6 +35,9 @@ def ingest(
     output_dir: Path = typer.Option(
         None, "--output-dir", help="Output directory for raw data"
     ),
+    force: bool = typer.Option(
+        False, "--force", help="Re-fetch data even if files already exist"
+    ),
 ) -> None:
     """Download raw data from external sources."""
     logger.info("Starting data ingestion")
@@ -42,6 +45,7 @@ def ingest(
         start_year=start_year,
         end_year=end_year,
         output_dir=output_dir,
+        force=force,
     )
     logger.info("Data ingestion complete")
 

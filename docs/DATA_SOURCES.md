@@ -10,10 +10,14 @@
   - **Status**: Fully functional
 
 - **Minor League Pitching** (`fetch_minor_league_pitching()`): ✅ Working
-  - Uses FanGraphs API (`src/fetch_milb_fangraphs.py`)
-  - Supports minor league stats from ~2005+ (tested back to 2005)
-  - Automatically fetches when player info with FanGraphs IDs is available
-  - **Status**: Fully functional and integrated
+  - Primary: MiLB.com scraping (`src/fetch_milb_mlbcom.py`) - ✅ Fully functional
+    - Uses league-level scraping (more efficient than player-by-player)
+    - Handles pagination automatically
+    - Supports multiple leagues and year ranges
+    - Uses MLBAM IDs directly (no ID mapping needed)
+  - Fallback: FanGraphs API (`src/fetch_milb_fangraphs.py`) - ✅ Fully functional
+    - Supports minor league stats from ~2005+ (tested back to 2005)
+  - **Status**: Fully functional with both sources, MiLB.com prioritized
 
 ### ⚠️ Partially Implemented
 - **All-Star Rosters** (`fetch_all_star_rosters()`): ⚠️ Partial
@@ -26,11 +30,16 @@
 ### Option 1: Baseball Reference Scraping (Blocked)
 - **Status**: ❌ Currently blocked (403 Forbidden)
 - **Module**: `src/scrape_milb.py`
-- **Workarounds**:
+- **Attempted Solutions**:
+  - ✅ Integrated `pybaseball.BRefSession` for rate limiting (10 req/min)
+  - ✅ Added browser-like headers (User-Agent, Accept, etc.)
+  - ✅ Visited main page first to get cookies
+  - ❌ Still getting 403 errors - likely advanced bot detection
+- **Workarounds** (not implemented):
   - Use rotating proxies
-  - Use Selenium/Playwright for browser automation
-  - Respect rate limits more aggressively
+  - Use Selenium/Playwright for browser automation with JavaScript rendering
   - Contact Baseball Reference for API access
+- **Recommendation**: Focus on FanGraphs API and MiLB.com scraping (both working)
 
 ### Option 2: MLB Stats API (Limited)
 - **Status**: ⚠️ API accessible but doesn't return minor league stats
@@ -49,17 +58,38 @@
 - **API Endpoint**: `https://www.fangraphs.com/api/players/stats?playerid={id}&position=P&type=0&season={year}`
 - **Limitations**: Requires FanGraphs player IDs (available via Chadwick Register)
 
-### Option 4: The Baseball Cube
+### Option 4: MiLB.com ✅ IMPLEMENTED (Primary Source)
+- **Status**: ✅ Fully functional and tested
+- **Module**: `src/fetch_milb_mlbcom.py`
+- **What works**: 
+  - Official Minor League Baseball website
+  - Uses MLBAM IDs directly (no ID mapping needed)
+  - League-level scraping (more efficient than player-by-player)
+  - Handles pagination automatically (`?page=1`, `?page=2`, etc.)
+  - Supports year filtering (`?season=YYYY`)
+  - URL pattern: `https://www.milb.com/{league}/stats/pitching?season=YYYY&page=N`
+  - Scrapes multiple leagues across year ranges efficiently
+- **Advantages**:
+  - More efficient than player-by-player scraping
+  - Handles pagination, league switching, and year filtering
+  - Official source with comprehensive coverage
+  - No API rate limits (just respectful delays)
+- **Limitations**: 
+  - Requires web scraping (HTML structure may change over time)
+  - Slower than API calls but more reliable than Baseball Reference
+- **Priority**: Primary source (before FanGraphs) due to efficiency and reliability
+
+### Option 5: The Baseball Cube
 - **Status**: ❓ Not explored yet
 - **Potential**: Offers minor league stats (may require purchase)
 - **Link**: https://www.thebaseballcube.com/
 
-### Option 5: Retrosheet
+### Option 6: Retrosheet
 - **Status**: ❓ Limited historical coverage
 - **Potential**: Historical minor league data
 - **Approach**: Check Retrosheet minor league files
 
-### Option 6: Manual Data Entry / Pre-existing Dataset
+### Option 7: Manual Data Entry / Pre-existing Dataset
 - **Status**: ✅ Most reliable short-term solution
 - **Approach**: 
   - Use existing datasets if available
@@ -72,19 +102,26 @@
 - **Chadwick Register**: Player IDs available from 1871+
 - **MLB Stats API** (for player ID discovery): Only supports 2008+ (not required if using Chadwick Register)
 
-**Current Setup**: Uses Chadwick Register for player IDs (all years) + FanGraphs API for minor league stats (2005+)
+**Project Scope**: 
+- **Focus**: Players who debuted 2005-2023 (ensures full data coverage)
+- **Rationale**: FanGraphs API provides complete minor league stats from 2005+, eliminating data gaps
+
+**Current Setup**: 
+- Chadwick Register for player IDs (all years)
+- FanGraphs API for minor league stats (2005+) - primary source
+- MiLB.com scraping as fallback/supplement (2005+)
 
 ## Recommended Next Steps
 
 1. **Short-term**: ✅ Data pipeline working with FanGraphs API
 2. **Medium-term**: 
    - Implement All-Star roster fetching (currently using mock data)
-   - Test FanGraphs API with earlier years (< 2005) if needed
-   - Consider Baseball Reference scraping for pre-2005 minor league stats if needed
+   - Test full ingestion pipeline with 2005+ data
+   - Verify data completeness and quality
 3. **Long-term**: 
-   - Consider purchasing dataset from The Baseball Cube for comprehensive historical coverage
+   - Expand to earlier years if needed (would require alternative data sources)
    - Build relationships for API access
-   - Use combination of sources
+   - Use combination of sources for redundancy
 
 ## Testing the Pipeline
 

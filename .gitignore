@@ -29,6 +29,9 @@ data/features/*
 !data/processed/.gitkeep
 !data/features/.gitkeep
 
+# Scraping code (not needed in repo)
+data_fetch/
+
 # Reports (keep structure, ignore contents)
 reports/figures/*
 reports/tables/*
@@ -56,6 +59,11 @@ htmlcov/
 # Environment
 .env
 .env.local
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
 
 # OS
 .DS_Store

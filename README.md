@@ -101,12 +101,17 @@ mlb-all-star-prediction/
 Run the full pipeline:
 
 ```bash
-make ingest      # Download raw data
+make ingest      # Download raw data (skips if files exist, use --force to re-fetch)
 make build       # Build processed dataset
 make featurize   # Engineer features
 make train       # Train models
 make eval        # Evaluate models
 make report      # Generate markdown report
+```
+
+**Note**: The `ingest` command checks for existing data files and skips re-fetching by default. Use `--force` to re-fetch:
+```bash
+pipenv run python -m src.main ingest --force
 ```
 
 ### CLI Commands
@@ -126,7 +131,7 @@ pipenv run python -m src.main report
 
 Configuration is managed in `src/config.py` using Pydantic. Key settings:
 
-- **Data Collection**: `start_year`, `end_year` (default: 2000-2023)
+- **Data Collection**: `start_year`, `end_year` (default: 2005-2023)
   - FanGraphs API supports minor league stats from ~2005+
   - Chadwick Register provides player IDs from 1871+
 - **Train/Test Splits**: `train_end_year`, `val_end_year` (default: 2018, 2020)
