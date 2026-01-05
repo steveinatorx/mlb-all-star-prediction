@@ -49,7 +49,98 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
     """
     logger.info(f"Fetching All-Star rosters from {start_year} to {end_year}")
 
-    # Try pybaseball's all_star_full first (Lahman database)
+    # Try extracting from all_star_game_logs (works when all_star_full fails)
+    try:
+        from pybaseball import all_star_game_logs, chadwick_register
+        import pandas as pd
+
+        logger.info("Attempting to extract All-Star rosters from game logs")
+        
+        # Get game logs
+        game_logs_df = all_star_game_logs()
+        game_logs_df['year'] = pd.to_datetime(
+            game_logs_df['date'], format='%Y%m%d', errors='coerce'
+        ).dt.year
+        
+        # Filter to requested year range
+        game_logs_df = game_logs_df[
+            (game_logs_df['year'] >= start_year) & 
+            (game_logs_df['year'] <= end_year)
+        ]
+        
+        if len(game_logs_df) > 0:
+            # Extract all player ID columns (position players, pitchers, etc.)
+            player_id_cols = [
+                col for col in game_logs_df.columns 
+                if col.endswith('_id') and ('visiting_' in col or 'home_' in col)
+            ]
+            
+            # Collect all unique player IDs by year
+            all_star_players = []
+            for _, row in game_logs_df.iterrows():
+                year = int(row['year']) if pd.notna(row['year']) else None
+                if year is None:
+                    continue
+                
+                # Get all player IDs from this game
+                player_ids = [
+                    str(row[col]).strip() 
+                    for col in player_id_cols 
+                    if pd.notna(row.get(col)) and str(row[col]).strip() != ''
+                ]
+                
+                for pid in player_ids:
+                    all_star_players.append({
+                        'player_id_retro': pid,
+                        'season': year
+                    })
+            
+            # Convert to DataFrame and deduplicate
+            all_star_pd = pd.DataFrame(all_star_players).drop_duplicates()
+            
+            if len(all_star_pd) > 0:
+                logger.info(f"Extracted {len(all_star_pd)} All-Star appearances from game logs")
+                
+                # Map retro IDs to MLBAM IDs using Chadwick Register
+                logger.info("Mapping retro IDs to MLBAM IDs...")
+                chadwick = chadwick_register()
+                
+                # Convert to Polars for easier joining
+                all_star_pl = pl.from_pandas(all_star_pd)
+                chadwick_pl = pl.from_pandas(chadwick[['key_retro', 'key_mlbam']])
+                
+                # Join to get MLBAM IDs
+                result_df = (
+                    all_star_pl
+                    .join(
+                        chadwick_pl.rename({'key_retro': 'player_id_retro'}),
+                        on='player_id_retro',
+                        how='left'
+                    )
+                    .filter(pl.col('key_mlbam').is_not_null())
+                    .filter(pl.col('key_mlbam') != -1)  # -1 means no MLBAM ID
+                    .select([
+                        pl.col('key_mlbam').cast(pl.Utf8).alias('player_id'),
+                        pl.col('season'),
+                        pl.lit(True).alias('is_all_star')
+                    ])
+                    .unique()
+                )
+                
+                logger.info(
+                    f"Successfully mapped {len(result_df)} All-Star records "
+                    f"({len(all_star_pd) - len(result_df)} could not be mapped)"
+                )
+                
+                if len(result_df) > 0:
+                    return result_df
+                else:
+                    logger.warning("No All-Star records could be mapped to MLBAM IDs")
+
+    except Exception as e:
+        logger.warning(f"Could not extract from game logs: {e}")
+
+    # Try pybaseball's all_star_full (Lahman database) - usually fails
     try:
         from pybaseball import all_star_full
         import pandas as pd
@@ -59,10 +150,8 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
 
         if len(all_star_df) > 0:
             # Filter by year range
-            # Check what columns are available
             logger.info(f"Lahman data columns: {all_star_df.columns.tolist()}")
             
-            # Common Lahman columns: yearID, playerID, teamID, etc.
             if "yearID" in all_star_df.columns:
                 filtered = all_star_df[
                     (all_star_df["yearID"] >= start_year)
@@ -70,7 +159,6 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
                 ]
                 
                 # Convert to our format
-                # Need to map playerID to MLBAM ID
                 result_df = pl.from_pandas(filtered).select([
                     pl.col("playerID").alias("player_id_lahman"),
                     pl.col("yearID").alias("season"),
@@ -78,9 +166,6 @@ def fetch_all_star_rosters(start_year: int, end_year: int) -> pl.DataFrame:
                     pl.lit(True).alias("is_all_star")
                 ])
                 
-                # Try to convert Lahman playerID to MLBAM ID
-                # This requires a lookup - for now, use Lahman ID as player_id
-                # TODO: Add player ID mapping
                 logger.warning(
                     "Using Lahman playerID - need to map to MLBAM ID. "
                     "Using Lahman ID as player_id for now."

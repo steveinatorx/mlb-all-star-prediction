@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-01-05
+
+### Fixed
+- **All-Star roster data extraction**: Fixed `fetch_all_star_rosters()` to work reliably
+  - Primary method: Extract from `all_star_game_logs()` (works when `all_star_full()` fails)
+  - Maps retro IDs to MLBAM IDs using Chadwick Register
+  - Successfully extracts 389 All-Star appearances (2005-2023), 239 unique players
+  - Falls back gracefully: game logs → all_star_full → Baseball Reference → manual CSV → mock
+  - **Impact**: Pipeline can now run with real All-Star data instead of mock data
+
+### Changed
+- Updated `fetch_all_star_rosters()` to try game logs extraction first (most reliable)
+- Updated documentation in `docs/ALL_STAR_ROSTERS.md` to reflect working solution
+
+### Added
+- Blog notes documenting All-Star data extraction solution and repository organization decisions
+
 ## [0.3.0] - 2026-01-05
 
 ### Changed

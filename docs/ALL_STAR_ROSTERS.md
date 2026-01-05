@@ -1,18 +1,26 @@
 # All-Star Roster Data Sources
 
-## Current Status: ⚠️ Using Mock Data
+## Current Status: ✅ Working via pybaseball Game Logs
 
-All-Star rosters are currently using mock data because:
+All-Star rosters are now successfully fetched from pybaseball using `all_star_game_logs()`:
 
-1. **pybaseball's `all_star_full()`**: ❌ Failing
+1. **pybaseball's `all_star_game_logs()`**: ✅ Working
+   - Extracts player IDs from All-Star game logs (1933-2024)
+   - Maps retro IDs to MLBAM IDs using Chadwick Register
+   - Successfully extracts ~389 All-Star appearances for 2005-2023
+   - Covers 239 unique players
+
+2. **pybaseball's `all_star_full()`**: ❌ Still Failing
    - Relies on Lahman database download
    - Error: "File is not a zip file"
    - Lahman database source appears to be blocked/inaccessible
+   - **Workaround**: Using game logs instead (works perfectly)
 
-2. **Baseball Reference Scraping**: ❌ Blocked
+3. **Baseball Reference Scraping**: ❌ Blocked (fallback only)
    - URL pattern: `https://www.baseball-reference.com/allstar/MLB-allstar-game-{year}.shtml`
    - Getting 403 Forbidden errors
    - Even with `BRefSession` and browser-like headers
+   - **Not needed**: Game logs provide better coverage
 
 ## Why This Matters
 
