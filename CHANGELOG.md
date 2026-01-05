@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-01-05
+
+### Changed
+- **All-Star filtering**: Filtered All-Star rosters to pitchers only
+  - Updated MLB API extraction to check position (Pitcher) before including
+  - Updated game logs extraction to filter to pitchers only
+  - Result: 50 pitcher All-Stars in final dataset (all have minor league data) ✅
+- **Feature engineering**: Updated to handle pitcher-only All-Star labels
+  - ID mapping from FanGraphs IDs (minor league data) to MLBAM IDs (labels) working correctly
+
+### Added
+- **Research documentation**: Comprehensive research on pitcher All-Stars without minor league data
+  - `docs/PITCHER_RESEARCH_FINDINGS.md`: Analysis of 3 missing pitchers (1.5% missing rate)
+  - `docs/PITCHER_CAREER_PATH_RESEARCH.md`: General research on pitcher career paths
+  - `docs/PITCHER_ALL_STAR_RESEARCH.md`: Research methodology and findings
+- **Blog notes**: Added section on future data pools (college, international leagues, etc.)
+
+### Fixed
+- All-Star extraction now correctly filters to pitchers only (was including position players)
+
 ## [0.3.2] - 2026-01-05
 
 ### Changed
