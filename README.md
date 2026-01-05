@@ -314,10 +314,11 @@ make format    # Format code (black, ruff --fix)
 
 Comprehensive documentation available in `docs/`:
 
-- **[SHAP Analysis Guide](docs/SHAP_ANALYSIS.md)**: Understanding SHAP values, interpretation, and implementation
-- **[Ranking vs Binary Classification](docs/RANKING_VS_BINARY_CLASSIFICATION.md)**: Comparison of evaluation approaches
-- **[Evaluation Metrics Explanation](docs/EVALUATION_METRICS_EXPLANATION.md)**: Why PR-AUC/ROC-AUC over F1 score
-- **[Model Training Plan](docs/MODEL_TRAINING_PLAN.md)**: Training strategy and roadmap
+- **[Evaluation Metrics](docs/evaluation/EVALUATION_METRICS_EXPLANATION.md)**: Why PR-AUC/ROC-AUC over F1 score
+- **[Ranking vs Binary Classification](docs/evaluation/RANKING_VS_BINARY_CLASSIFICATION.md)**: Comparison of evaluation approaches
+- **[Interaction Features Results](docs/evaluation/INTERACTION_FEATURES_RESULTS.md)**: Performance analysis of interaction features
+- **[SHAP Analysis Guide](docs/interpretability/SHAP_ANALYSIS.md)**: Understanding SHAP values, interpretation, and implementation
+- **[Model Training Plan](docs/training/MODEL_TRAINING_PLAN.md)**: Training strategy and roadmap
 - **[Roadmap](docs/ROADMAP.md)**: Project roadmap and next steps
 
 ## Data Sources
