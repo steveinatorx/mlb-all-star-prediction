@@ -60,16 +60,19 @@ def log_model_training(
         # Log model
         try:
             if "xgboost" in model_name.lower():
-                mlflow.xgboost.log_model(model, "model")
+                import mlflow.xgboost as mlflow_xgb
+                mlflow_xgb.log_model(model, "model")
             elif "lightgbm" in model_name.lower() or "lgbm" in model_name.lower():
                 try:
-                    import mlflow.lightgbm
-                    mlflow.lightgbm.log_model(model, "model")
+                    import mlflow.lightgbm as mlflow_lgbm
+                    mlflow_lgbm.log_model(model, "model")
                 except (ImportError, AttributeError):
                     # Fallback to sklearn if lightgbm flavor not available
-                    mlflow.sklearn.log_model(model, "model")
+                    import mlflow.sklearn as mlflow_sklearn
+                    mlflow_sklearn.log_model(model, "model")
             else:
-                mlflow.sklearn.log_model(model, "model")
+                import mlflow.sklearn as mlflow_sklearn
+                mlflow_sklearn.log_model(model, "model")
         except Exception as e:
             logger.warning(f"Could not log model to MLflow: {e}")
             # Continue anyway - model logging is optional

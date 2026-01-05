@@ -1,6 +1,7 @@
 """CLI entrypoint using Typer."""
 
 from pathlib import Path
+from typing import Optional, List
 
 import typer
 from loguru import logger
@@ -19,6 +20,7 @@ from src.analyze_shap_interactions import analyze_model_interactions
 from src.create_interaction_features import add_interaction_features_to_pipeline
 from src.tune import tune_all_models
 from src.evaluation_metrics import generate_all_evaluation_metrics
+from src.ensemble import train_all_ensembles
 
 try:
     import mlflow
@@ -284,6 +286,28 @@ def mlflow_ui(
     except Exception as e:
         logger.error(f"Failed to start MLflow UI: {e}")
         raise typer.Exit(1)
+
+
+@app.command("ensemble")
+def ensemble(
+    model_paths: Optional[List[Path]] = typer.Option(
+        None, "--model-path", help="Path to base model (can specify multiple)"
+    ),
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to features file"
+    ),
+    output_dir: Path = typer.Option(
+        None, "--output-dir", help="Output directory for ensemble models"
+    ),
+) -> None:
+    """Train ensemble methods (voting, stacking, blending)."""
+    logger.info("Training ensemble methods")
+    train_all_ensembles(
+        model_paths=model_paths,
+        features_path=features_path,
+        output_dir=output_dir,
+    )
+    logger.info("Ensemble training complete")
 
 
 if __name__ == "__main__":
