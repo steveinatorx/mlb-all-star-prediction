@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-01-05
+
+### Changed
+- **Pipeline verification**: Successfully ran `build-dataset` with real All-Star data
+  - Generated processed dataset with 132 All-Stars out of 4,514 players (2.9% All-Star rate)
+  - Pre-debut filtering working correctly (892,687 → 318,027 records after quality filters)
+  - Labels created successfully from real All-Star rosters
+
+### Fixed
+- Re-fetched All-Star rosters to replace mock data with real data (389 records, 239 unique players)
+- Regenerated processed labels to match updated All-Star rosters
+
 ## [0.3.1] - 2026-01-05
 
 ### Fixed
