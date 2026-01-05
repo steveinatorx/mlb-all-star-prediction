@@ -275,44 +275,43 @@ mlflow ui
 
 ---
 
-## Phase 9: Production Readiness 🔥 PORTFOLIO FOCUS
+## Phase 9: AWS Deployment Plan 📋 DOCUMENTATION ONLY
 
-**Status**: 🔥 Planned
+**Status**: 📋 Planned (Documentation/Planning, not implementation)
 
-**Goal**: Demonstrate cloud deployment on AWS (portfolio project focus)
+**Goal**: Document how to deploy ML models in production on AWS
 
-### 9.1 AWS Cloud Deployment
-**Focus**: Show how to deploy ML models in production on AWS
+### 9.1 AWS Deployment Architecture
+**Focus**: Plan and document AWS deployment strategy
 
 **Tasks**:
-- [ ] Deploy model to AWS SageMaker (or Lambda + API Gateway)
-- [ ] Create prediction API endpoint
-- [ ] Set up model versioning (MLflow + S3)
-- [ ] Document deployment architecture
-- [ ] Create deployment guide
-
-**Implementation**: 
-- SageMaker endpoint OR Lambda function with API Gateway
-- Store models in S3
-- Use MLflow for model registry
-- Infrastructure as Code (Terraform/CloudFormation)
+- [ ] Document deployment architecture options
+  - SageMaker endpoint vs Lambda + API Gateway
+  - Model storage (S3 + MLflow)
+  - Infrastructure as Code (Terraform/CloudFormation)
+- [ ] Create architecture diagram
+- [ ] Document deployment steps
+- [ ] Cost estimation and comparison
+- [ ] Security considerations
+- [ ] Scaling strategy
 
 **Expected Output**:
-- Deployed prediction API
-- Deployment documentation
-- Architecture diagram
-- Cost estimation
+- `docs/AWS_DEPLOYMENT_PLAN.md` - Comprehensive deployment guide
+- Architecture diagrams
+- Cost analysis
+- Step-by-step deployment instructions
+
+**Note**: This is planning/documentation only. Actual deployment is out of scope for portfolio project.
 
 ### 9.2 Code Quality (Basic)
 - [x] Type hints throughout ✅
 - [x] Documentation (docstrings, README) ✅
 - [ ] Basic unit tests (for critical functions)
-- [ ] Integration tests (for deployment)
 
-### 9.3 Monitoring (Basic)
-- [ ] Basic logging for predictions
-- [ ] Error handling in API
-- [ ] Health check endpoint
+### 9.3 Production Considerations
+- [ ] Document monitoring strategy
+- [ ] Document error handling approach
+- [ ] Document model versioning strategy
 
 ---
 
