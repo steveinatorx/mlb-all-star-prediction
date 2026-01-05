@@ -821,7 +821,9 @@ def evaluate_all_models(
         )
 
         # SHAP for tree-based models (non-critical, failures are logged but don't stop evaluation)
-        if model_name in ["xgboost", "lightgbm", "random_forest"]:
+        # Check base model name (handle "_advanced" suffix)
+        base_model_name = model_name.replace("_advanced", "").replace("_baseline", "")
+        if base_model_name in ["xgboost", "lightgbm", "random_forest"]:
             try:
                 plot_shap_importance(
                     model_path,
