@@ -20,6 +20,11 @@ from src.create_interaction_features import add_interaction_features_to_pipeline
 from src.tune import tune_all_models
 from src.evaluation_metrics import generate_all_evaluation_metrics
 
+try:
+    import mlflow
+except ImportError:
+    mlflow = None
+
 # Configure logging
 logger.remove()
 logger.add(
@@ -251,6 +256,34 @@ def eval_metrics(
         split=split,
     )
     logger.info("Evaluation metrics generation complete")
+
+
+@app.command("mlflow-ui")
+def mlflow_ui(
+    port: int = typer.Option(5000, "--port", help="Port for MLflow UI"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host for MLflow UI"),
+) -> None:
+    """Start MLflow UI to view experiment tracking."""
+    if mlflow is None:
+        logger.error("MLflow not installed. Install with: pipenv install mlflow")
+        raise typer.Exit(1)
+
+    import subprocess
+    import sys
+
+    logger.info(f"Starting MLflow UI at http://{host}:{port}")
+    logger.info("Press Ctrl+C to stop")
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "mlflow", "ui", "--port", str(port), "--host", host],
+            check=True,
+        )
+    except KeyboardInterrupt:
+        logger.info("MLflow UI stopped")
+    except Exception as e:
+        logger.error(f"Failed to start MLflow UI: {e}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

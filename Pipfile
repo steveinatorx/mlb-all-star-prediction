@@ -33,6 +33,7 @@ imbalanced-learn = "*"
 optuna = "*"
 plotly = "*"
 kaleido = "*"
+mlflow = "*"
 
 [dev-packages]
 black = ">=23.0.0"

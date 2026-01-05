@@ -12,6 +12,12 @@ from src.config import config
 from src.train import load_features
 
 try:
+    from src.mlflow_tracking import log_model_training
+except ImportError:
+    log_model_training = None
+    logger.warning("MLflow tracking not available")
+
+try:
     from imblearn.over_sampling import SMOTE, ADASYN
 except ImportError:
     SMOTE = None
@@ -455,6 +461,26 @@ def train_all_models_advanced(
         "techniques": lr_result["techniques"],
     }
 
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="logistic_regression_advanced",
+                model=lr_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": lr_result["pr_auc"], "roc_auc": lr_result["roc_auc"]},
+                params={"C": 1.0, "penalty": "l2"},
+                tags={
+                    "technique": "advanced",
+                    "features": "base",
+                    "class_weights": str(use_class_weights),
+                    "smote": str(use_smote),
+                },
+                model_path=lr_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
+
     # Random Forest
     rf_result = train_random_forest_advanced(
         X_train, y_train, X_val, y_val, feature_names,
@@ -478,6 +504,26 @@ def train_all_models_advanced(
         },
         "techniques": rf_result["techniques"],
     }
+
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="random_forest_advanced",
+                model=rf_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": rf_result["pr_auc"], "roc_auc": rf_result["roc_auc"]},
+                params={"n_estimators": 100, "max_depth": 10},
+                tags={
+                    "technique": "advanced",
+                    "features": "base",
+                    "class_weights": str(use_class_weights),
+                    "smote": str(use_smote),
+                },
+                model_path=rf_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
 
     # XGBoost
     xgb_result = train_xgboost_advanced(
@@ -504,6 +550,26 @@ def train_all_models_advanced(
         "techniques": xgb_result["techniques"],
     }
 
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="xgboost_advanced",
+                model=xgb_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": xgb_result["pr_auc"], "roc_auc": xgb_result["roc_auc"]},
+                params={"n_estimators": 100, "max_depth": 6, "learning_rate": 0.1},
+                tags={
+                    "technique": "advanced",
+                    "features": "base",
+                    "class_weights": str(use_class_weights),
+                    "smote": str(use_smote),
+                },
+                model_path=xgb_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
+
     # LightGBM (optional)
     lgbm_result = train_lightgbm_advanced(
         X_train, y_train, X_val, y_val, feature_names,
@@ -529,6 +595,26 @@ def train_all_models_advanced(
             },
             "techniques": lgbm_result["techniques"],
         }
+
+        # Log to MLflow
+        if log_model_training:
+            try:
+                log_model_training(
+                    model_name="lightgbm_advanced",
+                    model=lgbm_result["model"],
+                    feature_names=feature_names,
+                    metrics={"pr_auc": lgbm_result["pr_auc"], "roc_auc": lgbm_result["roc_auc"]},
+                    params={"n_estimators": 100, "max_depth": 6, "learning_rate": 0.1},
+                    tags={
+                        "technique": "advanced",
+                        "features": "base",
+                        "class_weights": str(use_class_weights),
+                        "smote": str(use_smote),
+                    },
+                    model_path=lgbm_path,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log to MLflow: {e}")
 
     # Save results summary
     results_path = output_dir / "training_results_advanced.json"

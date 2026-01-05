@@ -17,6 +17,12 @@ from xgboost import XGBClassifier
 from src.config import config
 
 try:
+    from src.mlflow_tracking import log_hyperparameter_tuning
+except ImportError:
+    log_hyperparameter_tuning = None
+    logger.warning("MLflow tracking not available")
+
+try:
     import optuna
     from optuna.visualization import (
         plot_optimization_history,
@@ -304,6 +310,20 @@ def tune_all_models(
         json.dump(summary, f, indent=2)
 
     logger.info(f"Tuning complete. Results saved to {output_dir}")
+
+    # Log to MLflow
+    if log_hyperparameter_tuning:
+        for model_name, model_results in results.items():
+            try:
+                log_hyperparameter_tuning(
+                    model_name=model_name,
+                    best_params=model_results["best_params"],
+                    best_metrics={"pr_auc": model_results["best_value"]},
+                    study_path=output_dir / f"{model_name}_study.pkl",
+                    tags={"tuning_method": "optuna", "use_smote": str(use_smote)},
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log tuning to MLflow: {e}")
 
     # Generate visualization plots
     try:

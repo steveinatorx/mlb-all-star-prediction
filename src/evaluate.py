@@ -20,6 +20,12 @@ from sklearn.metrics import (
 from src.config import config
 
 try:
+    from src.mlflow_tracking import log_evaluation_metrics
+except ImportError:
+    log_evaluation_metrics = None
+    logger.warning("MLflow tracking not available")
+
+try:
     import shap
 except ImportError:
     shap = None
@@ -847,6 +853,18 @@ def evaluate_all_models(
                 )
 
         results[model_name] = eval_result["metrics"]
+
+        # Log to MLflow
+        if log_evaluation_metrics:
+            try:
+                log_evaluation_metrics(
+                    model_name=model_name,
+                    metrics=eval_result["metrics"],
+                    split=split,
+                    tags={"experiment": "evaluation"},
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log evaluation to MLflow: {e}")
 
         # Save metrics to CSV (exclude nested data like y_pred_proba, y_true)
         metrics_dict = {k: v for k, v in eval_result["metrics"].items() 

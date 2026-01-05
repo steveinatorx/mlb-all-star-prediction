@@ -21,6 +21,12 @@ from xgboost import XGBClassifier
 from src.config import config
 
 try:
+    from src.mlflow_tracking import log_model_training
+except ImportError:
+    log_model_training = None
+    logger.warning("MLflow tracking not available")
+
+try:
     from lightgbm import LGBMClassifier
 except ImportError:
     LGBMClassifier = None
@@ -400,6 +406,21 @@ def train_all_models(
         "intercept": lr_result["intercept"],
     }
 
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="logistic_regression_baseline",
+                model=lr_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": lr_result["pr_auc"], "roc_auc": lr_result["roc_auc"]},
+                params={"C": 1.0, "penalty": "l2"},
+                tags={"technique": "baseline", "features": "base"},
+                model_path=lr_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
+
     # Random Forest
     rf_result = train_random_forest(X_train, y_train, X_val, y_val, feature_names)
     rf_path = output_dir / "random_forest.joblib"
@@ -418,6 +439,21 @@ def train_all_models(
         },
     }
 
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="random_forest_baseline",
+                model=rf_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": rf_result["pr_auc"], "roc_auc": rf_result["roc_auc"]},
+                params={"n_estimators": 100, "max_depth": 10},
+                tags={"technique": "baseline", "features": "base"},
+                model_path=rf_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
+
     # XGBoost
     xgb_result = train_xgboost(X_train, y_train, X_val, y_val, feature_names)
     xgb_path = output_dir / "xgboost.joblib"
@@ -435,6 +471,21 @@ def train_all_models(
             "roc_auc": xgb_result["roc_auc"],
         },
     }
+
+    # Log to MLflow
+    if log_model_training:
+        try:
+            log_model_training(
+                model_name="xgboost_baseline",
+                model=xgb_result["model"],
+                feature_names=feature_names,
+                metrics={"pr_auc": xgb_result["pr_auc"], "roc_auc": xgb_result["roc_auc"]},
+                params={"n_estimators": 100, "max_depth": 6, "learning_rate": 0.1},
+                tags={"technique": "baseline", "features": "base"},
+                model_path=xgb_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log to MLflow: {e}")
 
     # LightGBM (optional)
     lgbm_result = train_lightgbm(X_train, y_train, X_val, y_val, feature_names)
