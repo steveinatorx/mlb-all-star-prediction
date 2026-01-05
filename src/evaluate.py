@@ -532,52 +532,107 @@ def plot_shap_importance(
     if len(split_df) > max_samples:
         split_df = split_df.sample(max_samples, seed=config.random_seed)
 
-    # Extract X and y - convert to float64, handling nulls
-    def df_to_numpy(df_subset: pl.DataFrame) -> np.ndarray:
-        """Convert Polars DataFrame to numpy array, handling nulls."""
+    # Extract X and y - convert to float64, handling nulls and missing features
+    def df_to_numpy(df_subset: pl.DataFrame, expected_features: list[str]) -> np.ndarray:
+        """Convert Polars DataFrame to numpy array, handling nulls and missing features."""
         arrays = []
-        for col in feature_names:
-            col_data = df_subset[col]
-            if col_data.dtype in [pl.Float64, pl.Float32]:
-                arr = col_data.to_numpy()
-                arr = np.array([float(x) if x is not None else np.nan for x in arr])
-            elif col_data.dtype in [pl.Int64, pl.Int32, pl.UInt32, pl.UInt64]:
-                arr = col_data.to_numpy()
-                arr = np.array([float(x) if x is not None else np.nan for x in arr])
+        for col in expected_features:
+            if col in df_subset.columns:
+                col_data = df_subset[col]
+                if col_data.dtype in [pl.Float64, pl.Float32]:
+                    arr = col_data.to_numpy()
+                    arr = np.array([float(x) if x is not None else np.nan for x in arr])
+                elif col_data.dtype in [pl.Int64, pl.Int32, pl.UInt32, pl.UInt64]:
+                    arr = col_data.to_numpy()
+                    arr = np.array([float(x) if x is not None else np.nan for x in arr])
+                else:
+                    arr = np.array([float(x) if x is not None else np.nan for x in col_data.to_list()])
             else:
-                arr = np.array([float(x) if x is not None else np.nan for x in col_data.to_list()])
+                # Feature missing - fill with zeros
+                logger.warning(f"Feature '{col}' not found in DataFrame, filling with zeros")
+                arr = np.zeros(len(df_subset), dtype=np.float64)
             arrays.append(arr)
         return np.column_stack(arrays).astype(np.float64)
     
-    X = df_to_numpy(split_df.select(feature_names))
+    X = df_to_numpy(split_df, feature_names)
     
-    # Handle imputer if present
+    # X should now have the correct number of features (matching feature_names length)
+    # Verify it matches what model expects
+    if hasattr(model, "n_features_in_"):
+        expected_features = model.n_features_in_
+        if X.shape[1] != expected_features:
+            if X.shape[1] < expected_features:
+                # Pad with zeros
+                logger.warning(
+                    f"SHAP: X has {X.shape[1]} features, model expects {expected_features}. "
+                    f"Padding with zeros before preprocessing."
+                )
+                padding = np.zeros((X.shape[0], expected_features - X.shape[1]))
+                X = np.column_stack([X, padding])
+            else:
+                # Truncate to expected features
+                logger.warning(
+                    f"SHAP: X has {X.shape[1]} features, model expects {expected_features}. "
+                    f"Truncating to first {expected_features} features before preprocessing."
+                )
+                X = X[:, :expected_features]
+    
+    # Handle imputer if present - ensure feature count maintained
     if "imputer" in model_data:
         imputer = model_data["imputer"]
         if X.shape[1] == imputer.n_features_in_:
             X = imputer.transform(X)
         else:
+            logger.warning(
+                f"SHAP: Imputer expects {imputer.n_features_in_} features, "
+                f"but X has {X.shape[1]}. Using fallback imputation."
+            )
             from sklearn.impute import SimpleImputer
             fallback_imputer = SimpleImputer(strategy="median")
             X = fallback_imputer.fit_transform(X)
+            # Re-align after imputation
+            if hasattr(model, "n_features_in_") and X.shape[1] != model.n_features_in_:
+                if X.shape[1] < model.n_features_in_:
+                    padding = np.zeros((X.shape[0], model.n_features_in_ - X.shape[1]))
+                    X = np.column_stack([X, padding])
+                else:
+                    X = X[:, :model.n_features_in_]
     elif np.isnan(X).any():
         # Impute missing values for SHAP
         from sklearn.impute import SimpleImputer
         imputer = SimpleImputer(strategy="median")
         X = imputer.fit_transform(X)
+        # Re-align after imputation
+        if hasattr(model, "n_features_in_") and X.shape[1] != model.n_features_in_:
+            if X.shape[1] < model.n_features_in_:
+                padding = np.zeros((X.shape[0], model.n_features_in_ - X.shape[1]))
+                X = np.column_stack([X, padding])
+            else:
+                X = X[:, :model.n_features_in_]
+    
+    # Final check before SHAP
+    if hasattr(model, "n_features_in_") and X.shape[1] != model.n_features_in_:
+        logger.error(
+            f"SHAP: Feature count still mismatched after all preprocessing "
+            f"(X has {X.shape[1]} features, model expects {model.n_features_in_}). "
+            f"Cannot proceed with SHAP."
+        )
+        return
 
     # Create SHAP explainer
     try:
-        # Skip SHAP for XGBoost if feature count mismatch (known issue)
-        if "xgboost" in str(type(model)).lower() and hasattr(model, "n_features_in_"):
+        # Verify feature count matches before creating explainer
+        if hasattr(model, "n_features_in_"):
             if X.shape[1] != model.n_features_in_:
-                logger.warning(
-                    f"SHAP: Skipping XGBoost SHAP due to feature mismatch "
-                    f"(X has {X.shape[1]} features, model expects {model.n_features_in_})"
+                logger.error(
+                    f"SHAP: Feature count mismatch after alignment "
+                    f"(X has {X.shape[1]} features, model expects {model.n_features_in_}). "
+                    f"Skipping SHAP."
                 )
                 return
         
-        explainer = shap.TreeExplainer(model)
+        # Use auto feature perturbation (will use interventional if background dataset provided)
+        explainer = shap.TreeExplainer(model, feature_perturbation="auto")
         shap_values = explainer.shap_values(X)
 
         # Handle binary classification (shap_values is a list)
@@ -599,6 +654,86 @@ def plot_shap_importance(
         plt.close()
 
         logger.info(f"Saved SHAP plot to {output_path}")
+
+        # Generate waterfall plots for top predictions (highest probability All-Stars)
+        if len(X) > 0:
+            # Get predictions
+            y_pred_proba = model.predict_proba(X)[:, 1] if hasattr(model, "predict_proba") else model.predict(X)
+            
+            # Find top predictions (highest probability)
+            top_k = min(5, len(X))
+            top_indices = np.argsort(y_pred_proba)[-top_k:][::-1]
+            
+            waterfall_dir = config.figures_dir / "shap_waterfalls"
+            waterfall_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get base value (expected value)
+            if isinstance(explainer.expected_value, (list, np.ndarray)):
+                base_value = explainer.expected_value[1]  # Positive class
+            else:
+                base_value = explainer.expected_value
+            
+            for idx in top_indices:
+                try:
+                    # Create Explanation object for single instance
+                    explanation = shap.Explanation(
+                        values=shap_values[idx],
+                        base_values=base_value,
+                        data=X[idx],
+                        feature_names=feature_names[:len(shap_values[idx])]
+                    )
+                    
+                    plt.figure(figsize=(10, 8))
+                    shap.plots.waterfall(explanation, show=False, max_display=15)
+                    waterfall_path = waterfall_dir / f"{model_path.stem}_top_{idx}.png"
+                    plt.tight_layout()
+                    plt.savefig(waterfall_path, dpi=300, bbox_inches="tight")
+                    plt.close()
+                    logger.info(f"Saved waterfall plot to {waterfall_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate waterfall plot for index {idx}: {e}")
+
+        # Generate dependence plots for top 5 features
+        if len(shap_values.shape) == 2 and shap_values.shape[1] > 0:
+            # Calculate mean absolute SHAP values to find top features
+            mean_abs_shap = np.abs(shap_values).mean(axis=0)
+            top_feature_indices = np.argsort(mean_abs_shap)[-5:][::-1]
+            
+            dependence_dir = config.figures_dir / "shap_dependence"
+            dependence_dir.mkdir(parents=True, exist_ok=True)
+            
+            for feat_idx in top_feature_indices:
+                try:
+                    # Find feature that interacts most with this one
+                    # Calculate interaction strength
+                    interaction_strengths = []
+                    for other_idx in range(len(feature_names)):
+                        if other_idx != feat_idx:
+                            # Simple interaction: correlation between SHAP values
+                            corr = np.corrcoef(shap_values[:, feat_idx], shap_values[:, other_idx])[0, 1]
+                            interaction_strengths.append((other_idx, abs(corr)))
+                    
+                    # Get most interacting feature
+                    if interaction_strengths:
+                        interaction_strengths.sort(key=lambda x: x[1], reverse=True)
+                        interaction_idx = interaction_strengths[0][0]
+                        
+                        plt.figure(figsize=(10, 6))
+                        shap.dependence_plot(
+                            feat_idx,
+                            shap_values,
+                            X,
+                            feature_names=feature_names[:X.shape[1]],
+                            interaction_index=interaction_idx,
+                            show=False
+                        )
+                        dep_path = dependence_dir / f"{model_path.stem}_{feature_names[feat_idx]}.png"
+                        plt.tight_layout()
+                        plt.savefig(dep_path, dpi=300, bbox_inches="tight")
+                        plt.close()
+                        logger.info(f"Saved dependence plot to {dep_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate dependence plot for feature {feat_idx}: {e}")
 
     except Exception as e:
         logger.warning(f"Failed to generate SHAP plot: {e}")

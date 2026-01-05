@@ -15,6 +15,8 @@ from src.train import train_all_models
 from src.train_advanced import (
     train_all_models_advanced,
 )
+from src.analyze_shap_interactions import analyze_model_interactions
+from src.create_interaction_features import add_interaction_features_to_pipeline
 
 # Configure logging
 logger.remove()
@@ -155,6 +157,52 @@ def report(
     logger.info("Generating report")
     generate_markdown_report(experiments_dir=experiments_dir, output_path=output_path)
     logger.info("Report generation complete")
+
+
+@app.command("analyze-interactions")
+def analyze_interactions(
+    model_path: Path = typer.Option(
+        ..., "--model-path", help="Path to trained model"
+    ),
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to features file"
+    ),
+    split: str = typer.Option(
+        "train", "--split", help="Split to analyze (train/val/test)"
+    ),
+    output_dir: Path = typer.Option(
+        None, "--output-dir", help="Output directory for interaction reports"
+    ),
+) -> None:
+    """Analyze feature interactions using SHAP values."""
+    logger.info("Analyzing feature interactions")
+    results = analyze_model_interactions(
+        model_path=model_path,
+        features_path=features_path,
+        split=split,
+        output_dir=output_dir,
+    )
+    logger.info(f"Interaction analysis complete")
+    logger.info(f"Report saved to: {results['report_path']}")
+    logger.info(f"Found {len(results['suggestions'])} suggested interaction features")
+
+
+@app.command("add-interactions")
+def add_interactions(
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to existing features file"
+    ),
+    output_path: Path = typer.Option(
+        None, "--output-path", help="Path to save features with interactions"
+    ),
+) -> None:
+    """Add interaction features to existing features."""
+    logger.info("Adding interaction features")
+    result_path = add_interaction_features_to_pipeline(
+        features_path=features_path,
+        output_path=output_path,
+    )
+    logger.info(f"Features with interactions saved to: {result_path}")
 
 
 if __name__ == "__main__":
