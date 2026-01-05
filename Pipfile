@@ -29,6 +29,7 @@ lxml = ">=4.9.0"
 selenium = ">=4.15.0"
 webdriver-manager = ">=4.0.0"
 html5lib = ">=1.1"
+imbalanced-learn = "*"
 
 [dev-packages]
 black = ">=23.0.0"
@@ -40,4 +41,3 @@ python_version = "3.11"
 
 [scripts]
 mlb-allstar = "python -m src.main"
-

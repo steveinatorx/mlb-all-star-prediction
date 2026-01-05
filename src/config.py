@@ -46,6 +46,20 @@ class ProjectConfig(BaseSettings):
         default=50.0, description="Minimum IP in MiLB to be included"
     )
 
+    # Imbalanced data techniques
+    use_class_weights: bool = Field(
+        default=False,
+        description="Use class weights to penalize misclassifying All-Stars",
+    )
+    use_smote: bool = Field(
+        default=False,
+        description="Use SMOTE for synthetic oversampling of minority class",
+    )
+    smote_k_neighbors: int = Field(
+        default=5,
+        description="Number of nearest neighbors for SMOTE",
+    )
+
     # Train/test split
     train_end_year: int = Field(
         default=2018, description="Last year for training set"

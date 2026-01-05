@@ -12,6 +12,9 @@ from src.featurize import engineer_features
 from src.ingest import run_ingestion
 from src.report import generate_markdown_report
 from src.train import train_all_models
+from src.train_advanced import (
+    train_all_models_advanced,
+)
 
 # Configure logging
 logger.remove()
@@ -83,10 +86,38 @@ def train(
         None, "--output-dir", help="Output directory for models"
     ),
 ) -> None:
-    """Train all models."""
-    logger.info("Training models")
+    """Train all models (baseline)."""
+    logger.info("Training baseline models")
     train_all_models(features_path=features_path, output_dir=output_dir)
     logger.info("Model training complete")
+
+
+@app.command("train-advanced")
+def train_advanced(
+    features_path: Path = typer.Option(
+        None, "--features-path", help="Path to features file"
+    ),
+    output_dir: Path = typer.Option(
+        None, "--output-dir", help="Output directory for models"
+    ),
+    use_class_weights: bool = typer.Option(
+        True, "--use-class-weights/--no-class-weights", help="Use class weights"
+    ),
+    use_smote: bool = typer.Option(
+        True, "--use-smote/--no-smote", help="Use SMOTE oversampling"
+    ),
+) -> None:
+    """Train all models with advanced imbalanced data techniques."""
+    logger.info("Training models with advanced techniques")
+    logger.info(f"  - Class weights: {use_class_weights}")
+    logger.info(f"  - SMOTE: {use_smote}")
+    train_all_models_advanced(
+        features_path=features_path,
+        output_dir=output_dir,
+        use_class_weights=use_class_weights,
+        use_smote=use_smote,
+    )
+    logger.info("Advanced model training complete")
 
 
 @app.command()

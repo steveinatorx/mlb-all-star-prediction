@@ -1,4 +1,4 @@
-.PHONY: help setup install clean ingest build featurize train eval report test lint format
+.PHONY: help setup install clean ingest build featurize train train-advanced eval report test lint format
 
 help:
 	@echo "MLB All-Star Prediction - Available commands:"
@@ -8,7 +8,8 @@ help:
 	@echo "  make ingest     - Download raw data"
 	@echo "  make build      - Build processed dataset"
 	@echo "  make featurize  - Generate features"
-	@echo "  make train      - Train models"
+	@echo "  make train      - Train baseline models"
+	@echo "  make train-advanced - Train models with SMOTE and class weights"
 	@echo "  make eval       - Evaluate models and generate reports"
 	@echo "  make report     - Generate markdown report"
 	@echo "  make test       - Run tests"
@@ -42,6 +43,9 @@ featurize:
 
 train:
 	pipenv run python -m src.main train
+
+train-advanced:
+	pipenv run python -m src.main train-advanced
 
 eval:
 	pipenv run python -m src.main evaluate

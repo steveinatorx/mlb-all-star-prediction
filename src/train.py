@@ -32,6 +32,13 @@ except ImportError:
     LogisticGAM = None
     logger.warning("pygam not available, skipping GAM model")
 
+try:
+    from imblearn.over_sampling import SMOTE, ADASYN
+except ImportError:
+    SMOTE = None
+    ADASYN = None
+    logger.warning("imbalanced-learn not available, SMOTE/ADASYN disabled")
+
 
 def load_features(
     features_path: Optional[Path] = None,
@@ -57,19 +64,57 @@ def load_features(
         if col not in ["player_id", "is_all_star", "split"]
     ]
 
+    # Encode categorical columns before converting to numpy
+    # highest_level_reached: ordinal encoding (A=1, A+=2, AA=3, AAA=4, Unknown=0)
+    if "highest_level_reached" in feature_cols:
+        df = df.with_columns([
+            pl.when(pl.col("highest_level_reached") == "A")
+            .then(1)
+            .when(pl.col("highest_level_reached") == "A+")
+            .then(2)
+            .when(pl.col("highest_level_reached") == "AA")
+            .then(3)
+            .when(pl.col("highest_level_reached") == "AAA")
+            .then(4)
+            .otherwise(0)
+            .cast(pl.Int64)
+            .alias("highest_level_reached")
+        ])
+
     # Filter by split
     train_df = df.filter(pl.col("split") == "train")
     val_df = df.filter(pl.col("split") == "val")
     test_df = df.filter(pl.col("split") == "test")
 
-    # Extract X and y
-    X_train = train_df.select(feature_cols).to_numpy()
+    # Extract X and y - convert to float64, handling nulls
+    # Convert each column separately to handle nulls properly
+    def df_to_numpy(df_subset: pl.DataFrame) -> np.ndarray:
+        """Convert Polars DataFrame to numpy array, handling nulls."""
+        arrays = []
+        for col in feature_cols:
+            col_data = df_subset[col]
+            # Convert to numpy, handling nulls
+            if col_data.dtype in [pl.Float64, pl.Float32]:
+                arr = col_data.to_numpy()
+                # Replace None with np.nan
+                arr = np.array([float(x) if x is not None else np.nan for x in arr])
+            elif col_data.dtype in [pl.Int64, pl.Int32, pl.UInt32, pl.UInt64]:
+                arr = col_data.to_numpy()
+                # Replace None with np.nan, convert to float
+                arr = np.array([float(x) if x is not None else np.nan for x in arr])
+            else:
+                # Fallback: convert to float, handling nulls
+                arr = np.array([float(x) if x is not None else np.nan for x in col_data.to_list()])
+            arrays.append(arr)
+        return np.column_stack(arrays).astype(np.float64)
+    
+    X_train = df_to_numpy(train_df.select(feature_cols))
     y_train = train_df["is_all_star"].to_numpy().astype(int)
 
-    X_val = val_df.select(feature_cols).to_numpy()
+    X_val = df_to_numpy(val_df.select(feature_cols))
     y_val = val_df["is_all_star"].to_numpy().astype(int)
 
-    X_test = test_df.select(feature_cols).to_numpy()
+    X_test = df_to_numpy(test_df.select(feature_cols))
     y_test = test_df["is_all_star"].to_numpy().astype(int)
 
     logger.info(
@@ -102,10 +147,18 @@ def train_logistic_regression(
     """
     logger.info("Training Logistic Regression")
 
+    # Handle missing values: impute with median for numeric features
+    from sklearn.impute import SimpleImputer
+    
+    # Impute missing values with median
+    imputer = SimpleImputer(strategy="median")
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_val_imputed = imputer.transform(X_val)
+    
     # Scale features
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_val_scaled = scaler.transform(X_val)
+    X_train_scaled = scaler.fit_transform(X_train_imputed)
+    X_val_scaled = scaler.transform(X_val_imputed)
 
     # Train model with L2 regularization
     model = LogisticRegression(
