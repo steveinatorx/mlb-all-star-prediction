@@ -538,6 +538,7 @@ def plot_curves_with_confidence_intervals(
     curve_type: str = "pr",  # "pr" or "roc"
     n_bootstrap: int = 1000,
     output_path: Optional[Path] = None,
+    random_state: Optional[int] = None,
 ) -> None:
     """
     Plot precision-recall or ROC curves with bootstrap confidence intervals.
@@ -554,8 +555,8 @@ def plot_curves_with_confidence_intervals(
 
     logger.info(f"Generating {curve_type.upper()} curve with confidence intervals for {model_name}")
 
-    random_state = random_state or config.random_seed
-    np.random.seed(random_state)
+    random_state_val = random_state or config.random_seed
+    np.random.seed(random_state_val)
 
     # Bootstrap samples
     curves = []
@@ -563,7 +564,7 @@ def plot_curves_with_confidence_intervals(
         indices = resample(
             np.arange(len(y_true)),
             n_samples=len(y_true),
-            random_state=random_state + i,
+            random_state=random_state_val + i,
         )
         y_true_boot = y_true[indices]
         y_pred_proba_boot = y_pred_proba[indices]
