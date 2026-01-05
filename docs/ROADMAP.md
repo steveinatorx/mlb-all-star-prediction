@@ -198,9 +198,9 @@ pipenv run python -m src.main train --use-tuned-hyperparameters
 
 ---
 
-## Phase 6: Experiment Tracking 📋 PLANNED
+## Phase 6: Experiment Tracking 🔥 CRITICAL
 
-**Status**: 📋 Planned
+**Status**: 🔥 In Progress
 
 **Goal**: Track experiments and compare results
 
@@ -242,9 +242,9 @@ mlflow ui
 
 ---
 
-## Phase 7: Ensemble Methods 📋 PLANNED
+## Phase 7: Ensemble Methods 🔥 IMPORTANT
 
-**Status**: 📋 Planned
+**Status**: 🔥 Planned
 
 **Goal**: Combine models for better performance
 
@@ -267,58 +267,52 @@ mlflow ui
 
 ---
 
-## Phase 8: Data Expansion 📋 PLANNED (Optional)
+## Phase 8: Data Expansion ❌ OUT OF SCOPE
 
-**Status**: 📋 Optional (if needed)
+**Status**: ❌ Skipped (out of scope for portfolio project)
 
-**Goal**: Expand dataset to improve model performance
-
-### 8.1 Quick Wins (1-2 days)
-- [ ] Add 2024 debuts (if data available)
-- [ ] Fill missing `age_at_debut` (get birth dates)
-- [ ] Add organization features (map teams to organizations)
-
-**Expected Gain**: +5-10 All-Stars, +1-2 features
-
-### 8.2 Medium Effort (3-5 days)
-- [ ] Check 2000-2004 debuts for available minor league data
-- [ ] Investigate missing players (why 886 have labels but no features)
-- [ ] Add more draft information (draft round, position)
-
-**Expected Gain**: +20-30 All-Stars, +3-4 features
-
-### 8.3 High Effort (1-2 weeks)
-- [ ] Unblock Baseball Reference (proxies, Selenium, API access)
-- [ ] Explore Retrosheet for historical data
-- [ ] Add Statcast data (velocity, spin rate) for recent years
-
-**Expected Gain**: +50-100 All-Stars, +5-10 features
+**Decision**: Focus on ML techniques and deployment rather than data expansion
 
 ---
 
-## Phase 9: Production Readiness 📋 PLANNED
+## Phase 9: Production Readiness 🔥 PORTFOLIO FOCUS
 
-**Status**: 📋 Planned
+**Status**: 🔥 Planned
 
-**Goal**: Make code production-ready
+**Goal**: Demonstrate cloud deployment on AWS (portfolio project focus)
 
-### 9.1 Code Quality
-- [ ] Comprehensive unit tests
-- [ ] Integration tests
-- [ ] Code coverage > 80%
-- [ ] Type hints throughout
-- [ ] Documentation (docstrings, README)
+### 9.1 AWS Cloud Deployment
+**Focus**: Show how to deploy ML models in production on AWS
 
-### 9.2 Model Deployment
-- [ ] Model serving API (FastAPI/Flask)
-- [ ] Model versioning (MLflow model registry)
-- [ ] Prediction endpoint
-- [ ] Batch prediction script
+**Tasks**:
+- [ ] Deploy model to AWS SageMaker (or Lambda + API Gateway)
+- [ ] Create prediction API endpoint
+- [ ] Set up model versioning (MLflow + S3)
+- [ ] Document deployment architecture
+- [ ] Create deployment guide
 
-### 9.3 Monitoring
-- [ ] Model performance monitoring
-- [ ] Data drift detection
-- [ ] Prediction logging
+**Implementation**: 
+- SageMaker endpoint OR Lambda function with API Gateway
+- Store models in S3
+- Use MLflow for model registry
+- Infrastructure as Code (Terraform/CloudFormation)
+
+**Expected Output**:
+- Deployed prediction API
+- Deployment documentation
+- Architecture diagram
+- Cost estimation
+
+### 9.2 Code Quality (Basic)
+- [x] Type hints throughout ✅
+- [x] Documentation (docstrings, README) ✅
+- [ ] Basic unit tests (for critical functions)
+- [ ] Integration tests (for deployment)
+
+### 9.3 Monitoring (Basic)
+- [ ] Basic logging for predictions
+- [ ] Error handling in API
+- [ ] Health check endpoint
 
 ---
 
