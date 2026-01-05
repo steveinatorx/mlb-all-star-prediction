@@ -16,6 +16,9 @@ class PlayerSchema(BaseModel):
     mlb_debut: Optional[date] = Field(
         default=None, description="Date of MLB debut (critical for leakage prevention)"
     )
+    draft_round: Optional[int] = Field(default=None, description="MLB Draft round")
+    draft_year: Optional[int] = Field(default=None, description="MLB Draft year")
+    draft_position: Optional[int] = Field(default=None, description="Overall draft position")
 
 
 class MinorLeaguePitchingSeasonSchema(BaseModel):

@@ -168,26 +168,37 @@ def create_progression_features(
     )
 
     # Age at debut (if available)
-    # Note: birth_date is currently null for all players, so we'll set age_at_debut to null
-    # This feature can be populated later if birth_date data becomes available
-    age_at_debut = players_df.select("player_id").with_columns([
-        pl.lit(None).cast(pl.Float64).alias("age_at_debut")
-    ])
+    age_at_debut_df = players_df.select(["player_id", "birth_date", "mlb_debut"])
     
-    # TODO: If birth_date becomes available, calculate age like this:
-    # age_at_debut_df = players_df.select(["player_id", "birth_date", "mlb_debut"])
-    # if age_at_debut_df["birth_date"].is_not_null().any():
-    #     age_at_debut = (
-    #         age_at_debut_df
-    #         .filter(pl.col("birth_date").is_not_null() & pl.col("mlb_debut").is_not_null())
-    #         .with_columns([
-    #             ((pl.col("mlb_debut") - pl.col("birth_date")).dt.total_days() / 365.25)
-    #             .alias("age_at_debut")
-    #         ])
-    #         .select(["player_id", "age_at_debut"])
-    #     )
-    #     all_players = age_at_debut_df.select("player_id")
-    #     age_at_debut = all_players.join(age_at_debut, on="player_id", how="left")
+    if age_at_debut_df["birth_date"].is_not_null().any():
+        # Calculate age at debut
+        # Convert to date types if needed
+        age_at_debut = age_at_debut_df.filter(
+            pl.col("birth_date").is_not_null() & pl.col("mlb_debut").is_not_null()
+        )
+        
+        # Convert string columns to date
+        if age_at_debut["birth_date"].dtype == pl.Utf8:
+            age_at_debut = age_at_debut.with_columns(
+                pl.col("birth_date").str.to_date().alias("birth_date")
+            )
+        if age_at_debut["mlb_debut"].dtype == pl.Utf8:
+            age_at_debut = age_at_debut.with_columns(
+                pl.col("mlb_debut").str.to_date().alias("mlb_debut")
+            )
+        
+        # Calculate age
+        age_at_debut = age_at_debut.with_columns([
+            ((pl.col("mlb_debut") - pl.col("birth_date")).dt.total_days() / 365.25)
+            .alias("age_at_debut")
+        ]).select(["player_id", "age_at_debut"])
+        all_players = age_at_debut_df.select("player_id")
+        age_at_debut = all_players.join(age_at_debut, on="player_id", how="left")
+    else:
+        # No birth dates available
+        age_at_debut = players_df.select("player_id").with_columns([
+            pl.lit(None).cast(pl.Float64).alias("age_at_debut")
+        ])
 
     # Join all progression features
     progression = highest_level.join(level_counts, on="player_id", how="left").join(
@@ -315,10 +326,30 @@ def engineer_features(output_dir: Optional[Path] = None) -> Path:
     best_season_features = create_best_season_features(milb_df)
     progression_features = create_progression_features(milb_df, players_df)
 
+    # Add draft features from players table (if available)
+    # Check which draft columns exist before selecting
+    draft_cols = ["player_id"]
+    if "draft_round" in players_df.columns:
+        draft_cols.append("draft_round")
+    if "draft_year" in players_df.columns:
+        draft_cols.append("draft_year")
+    if "draft_position" in players_df.columns:
+        draft_cols.append("draft_position")
+    
+    draft_features = players_df.select(draft_cols)
+    # Only filter if we have draft columns
+    if "draft_year" in draft_features.columns or "draft_round" in draft_features.columns:
+        draft_features = draft_features.filter(
+            pl.col("draft_year").is_not_null() | pl.col("draft_round").is_not_null()
+        ).filter(
+        pl.col("draft_year").is_not_null() | pl.col("draft_round").is_not_null()
+    )
+
     # Join all features
     features = (
         career_features.join(best_season_features, on="player_id", how="left")
         .join(progression_features, on="player_id", how="left")
+        .join(draft_features, on="player_id", how="left")
         .join(data["labels"].select(["player_id", "is_all_star"]), on="player_id", how="left")
     )
 

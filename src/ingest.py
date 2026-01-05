@@ -1020,9 +1020,19 @@ def run_ingestion(
                 .alias("mlb_debut"),
                 pl.col("key_bbref").cast(pl.String).alias("bbref_id"),
                 pl.col("key_fangraphs").cast(pl.String).alias("fangraphs_id"),
+                pl.lit(None).cast(pl.Int64).alias("draft_round"),
+                pl.lit(None).cast(pl.Int64).alias("draft_year"),
+                pl.lit(None).cast(pl.Int64).alias("draft_position"),
             ])
             
             logger.info(f"Loaded {len(player_df)} players from Chadwick Register")
+            
+            # Enrich with birth dates and draft info (optional, can be slow)
+            # Uncomment to enable:
+            # from src.enrich_player_data import enrich_players_with_birth_dates, enrich_players_with_draft_info
+            # logger.info("Enriching with birth dates and draft info (this may take a while)...")
+            # player_df = enrich_players_with_birth_dates(player_df, delay=1.0, max_players=100)  # Test with 100 first
+            # player_df = enrich_players_with_draft_info(player_df, delay=1.0, max_players=100)  # Test with 100 first
         except Exception as e:
             logger.warning(f"Could not load Chadwick Register: {e}. Falling back to fetch_player_info()")
             player_df = fetch_player_info()

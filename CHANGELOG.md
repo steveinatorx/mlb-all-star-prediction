@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-01-05
+
+### Added
+- **Data enrichment infrastructure**: MLB Stats API integration for birth dates and draft information
+  - `src/enrich_player_data.py`: Core enrichment functions using MLB Stats API `/api/v1/people/{id}` endpoint
+  - `scripts/enrich_player_data.py`: Standalone script to run enrichment independently
+  - `scripts/test_draft_enrichment.py`: Test script for draft data fetching
+  - `docs/DATA_ENRICHMENT_SETUP.md`: Documentation for enrichment process
+- **New features**: `age_at_debut` and `draft_year` added to feature engineering
+  - `age_at_debut`: Calculated from birth_date and mlb_debut (47.9% coverage)
+  - `draft_year`: From MLB Stats API enrichment (35.7% coverage)
+- **Blog notes**: Comprehensive section on data acquisition and cleaning
+  - MLB Stats API integration strategy
+  - Data cleaning challenges and solutions
+  - Explanation of why only 50 All-Stars in dataset
+
+### Changed
+- **Feature engineering**: Updated to include enriched player data (birth dates, draft years)
+  - Fixed `age_at_debut` calculation to handle date type conversions
+  - Added draft features (draft_year, draft_round, draft_position) to feature set
+  - Updated to handle missing columns gracefully
+- **Dependencies**: Added `html5lib` to Pipfile (required for pybaseball amateur_draft, though not currently used)
+
+### Fixed
+- **Feature engineering**: Fixed date type handling in `age_at_debut` calculation
+  - Properly converts string dates to date types before calculation
+  - Handles missing birth_date or mlb_debut gracefully
+- **Data enrichment**: Fixed column existence checks before selecting draft features
+  - Prevents errors when draft columns don't exist in players DataFrame
+
 ## [0.3.3] - 2026-01-05
 
 ### Changed
