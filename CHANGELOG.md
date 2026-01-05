@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-01-05
+
+### Added
+- **Advanced imbalanced data techniques**: SMOTE and class weights for handling severe class imbalance
+  - `src/train_advanced.py`: Advanced training functions with SMOTE oversampling and class weights
+  - `make train-advanced`: New Makefile target for training with advanced techniques
+  - `train-advanced` CLI command: Train models with SMOTE and/or class weights
+  - `docs/IMBALANCED_DATA_TECHNIQUES.md`: Comprehensive documentation of techniques
+  - `docs/IMBALANCED_DATA_REPORT.md`: Detailed analysis and results report
+- **Data imputation**: Proper handling of missing values before SMOTE
+  - Median imputation strategy (robust to outliers)
+  - Critical preprocessing order: Impute → SMOTE → Scale → Train
+- **Evaluation metrics documentation**: Comprehensive explanation of PR-AUC vs ROC-AUC vs F1 Score
+  - `docs/EVALUATION_METRICS_EXPLANATION.md`: Detailed metrics comparison and rationale
+
+### Changed
+- **Model training**: Added support for advanced imbalanced data techniques
+  - Class weights: Inverse frequency weighting (negative: ~0.53, positive: ~7.65 before SMOTE)
+  - SMOTE: Synthetic oversampling (creates 399 synthetic All-Star samples)
+  - Combined approach: Both techniques used together for best results
+- **Configuration**: Added imbalanced data technique options
+  - `use_class_weights`: Enable/disable class weights (default: False)
+  - `use_smote`: Enable/disable SMOTE (default: False)
+  - `smote_k_neighbors`: Number of nearest neighbors for SMOTE (default: 5)
+
+### Fixed
+- **SMOTE preprocessing**: Fixed order of operations to impute missing values before SMOTE
+  - SMOTE doesn't accept NaN values, so imputation must happen first
+  - All advanced training functions now follow correct order: Impute → SMOTE → Scale → Train
+- **Model saving**: Added imputer to saved models for proper inference pipeline
+
+### Performance
+- **Random Forest**: +154% PR-AUC improvement (0.0366 → 0.0929) with SMOTE + class weights
+- **XGBoost**: +109% PR-AUC improvement (0.0453 → 0.0946) with SMOTE + class weights
+- **LightGBM**: +14.5% PR-AUC improvement (0.0549 → 0.0629) with SMOTE + class weights
+- **Logistic Regression**: -8% PR-AUC (0.0717 → 0.0659) - tree-based models benefit more from SMOTE
+
+### Dependencies
+- Added `imbalanced-learn` for SMOTE oversampling
+
 ## [0.3.4] - 2026-01-05
 
 ### Added

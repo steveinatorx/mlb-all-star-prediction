@@ -129,9 +129,20 @@ def train_logistic_regression_advanced(
     """
     logger.info("Training Logistic Regression (Advanced)")
 
-    # Apply SMOTE if requested
+    # IMPORTANT: Impute missing values BEFORE SMOTE (SMOTE doesn't accept NaN)
+    from sklearn.impute import SimpleImputer
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    # Handle missing values first
+    imputer = SimpleImputer(strategy="median")
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_val_imputed = imputer.transform(X_val)
+
+    # Apply SMOTE if requested (AFTER imputation)
     if use_smote:
-        X_train, y_train = apply_smote(X_train, y_train, k_neighbors=config.smote_k_neighbors)
+        X_train_imputed, y_train = apply_smote(X_train_imputed, y_train, k_neighbors=config.smote_k_neighbors)
 
     # Calculate class weights if requested
     class_weight = None
@@ -139,18 +150,7 @@ def train_logistic_regression_advanced(
         class_weights_dict = calculate_class_weights(y_train)
         class_weight = class_weights_dict
 
-    # Use the base training function with class weights
-    from sklearn.impute import SimpleImputer
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import average_precision_score, roc_auc_score
-
-    # Handle missing values
-    imputer = SimpleImputer(strategy="median")
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_val_imputed = imputer.transform(X_val)
-
-    # Scale features
+    # Scale features (AFTER SMOTE, so we scale the resampled data)
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train_imputed)
     X_val_scaled = scaler.transform(X_val_imputed)
@@ -209,18 +209,25 @@ def train_random_forest_advanced(
     """Train Random Forest with advanced imbalanced data techniques."""
     logger.info("Training Random Forest (Advanced)")
 
-    # Apply SMOTE if requested
+    # IMPORTANT: Impute missing values BEFORE SMOTE (SMOTE doesn't accept NaN)
+    from sklearn.impute import SimpleImputer
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    # Handle missing values first
+    imputer = SimpleImputer(strategy="median")
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_val_imputed = imputer.transform(X_val)
+
+    # Apply SMOTE if requested (AFTER imputation)
     if use_smote:
-        X_train, y_train = apply_smote(X_train, y_train, k_neighbors=config.smote_k_neighbors)
+        X_train_imputed, y_train = apply_smote(X_train_imputed, y_train, k_neighbors=config.smote_k_neighbors)
 
     # Calculate class weights if requested
     class_weight = None
     if use_class_weights:
         class_weights_dict = calculate_class_weights(y_train)
         class_weight = class_weights_dict
-
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.metrics import average_precision_score, roc_auc_score
 
     model = RandomForestClassifier(
         n_estimators=100,
@@ -230,9 +237,9 @@ def train_random_forest_advanced(
         n_jobs=config.n_jobs,
         class_weight=class_weight,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train_imputed, y_train)
 
-    y_pred_proba = model.predict_proba(X_val)[:, 1]
+    y_pred_proba = model.predict_proba(X_val_imputed)[:, 1]
     pr_auc = average_precision_score(y_val, y_pred_proba)
     roc_auc = roc_auc_score(y_val, y_pred_proba)
 
@@ -240,6 +247,7 @@ def train_random_forest_advanced(
 
     return {
         "model": model,
+        "imputer": imputer,
         "feature_names": feature_names,
         "pr_auc": float(pr_auc),
         "roc_auc": float(roc_auc),
@@ -264,9 +272,19 @@ def train_xgboost_advanced(
     """Train XGBoost with advanced imbalanced data techniques."""
     logger.info("Training XGBoost (Advanced)")
 
-    # Apply SMOTE if requested
+    # IMPORTANT: Impute missing values BEFORE SMOTE (SMOTE doesn't accept NaN)
+    from sklearn.impute import SimpleImputer
+    from sklearn.metrics import average_precision_score, roc_auc_score
+    from xgboost import XGBClassifier
+
+    # Handle missing values first
+    imputer = SimpleImputer(strategy="median")
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_val_imputed = imputer.transform(X_val)
+
+    # Apply SMOTE if requested (AFTER imputation)
     if use_smote:
-        X_train, y_train = apply_smote(X_train, y_train, k_neighbors=config.smote_k_neighbors)
+        X_train_imputed, y_train = apply_smote(X_train_imputed, y_train, k_neighbors=config.smote_k_neighbors)
 
     # Calculate class weights if requested
     scale_pos_weight = None
@@ -274,9 +292,6 @@ def train_xgboost_advanced(
         class_weights_dict = calculate_class_weights(y_train)
         # XGBoost uses scale_pos_weight instead of class_weight
         scale_pos_weight = class_weights_dict[1] / class_weights_dict[0]
-
-    from sklearn.metrics import average_precision_score, roc_auc_score
-    from xgboost import XGBClassifier
 
     model = XGBClassifier(
         n_estimators=100,
@@ -287,9 +302,9 @@ def train_xgboost_advanced(
         eval_metric="logloss",
         use_label_encoder=False,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train_imputed, y_train)
 
-    y_pred_proba = model.predict_proba(X_val)[:, 1]
+    y_pred_proba = model.predict_proba(X_val_imputed)[:, 1]
     pr_auc = average_precision_score(y_val, y_pred_proba)
     roc_auc = roc_auc_score(y_val, y_pred_proba)
 
@@ -297,6 +312,7 @@ def train_xgboost_advanced(
 
     return {
         "model": model,
+        "imputer": imputer,
         "feature_names": feature_names,
         "pr_auc": float(pr_auc),
         "roc_auc": float(roc_auc),
@@ -326,17 +342,24 @@ def train_lightgbm_advanced(
 
     logger.info("Training LightGBM (Advanced)")
 
-    # Apply SMOTE if requested
+    # IMPORTANT: Impute missing values BEFORE SMOTE (SMOTE doesn't accept NaN)
+    from sklearn.impute import SimpleImputer
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    # Handle missing values first
+    imputer = SimpleImputer(strategy="median")
+    X_train_imputed = imputer.fit_transform(X_train)
+    X_val_imputed = imputer.transform(X_val)
+
+    # Apply SMOTE if requested (AFTER imputation)
     if use_smote:
-        X_train, y_train = apply_smote(X_train, y_train, k_neighbors=config.smote_k_neighbors)
+        X_train_imputed, y_train = apply_smote(X_train_imputed, y_train, k_neighbors=config.smote_k_neighbors)
 
     # Calculate class weights if requested
     class_weight = None
     if use_class_weights:
         class_weights_dict = calculate_class_weights(y_train)
         class_weight = class_weights_dict
-
-    from sklearn.metrics import average_precision_score, roc_auc_score
 
     model = LGBMClassifier(
         n_estimators=100,
@@ -346,9 +369,9 @@ def train_lightgbm_advanced(
         class_weight=class_weight,
         verbose=-1,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train_imputed, y_train)
 
-    y_pred_proba = model.predict_proba(X_val)[:, 1]
+    y_pred_proba = model.predict_proba(X_val_imputed)[:, 1]
     pr_auc = average_precision_score(y_val, y_pred_proba)
     roc_auc = roc_auc_score(y_val, y_pred_proba)
 
@@ -356,6 +379,7 @@ def train_lightgbm_advanced(
 
     return {
         "model": model,
+        "imputer": imputer,
         "feature_names": feature_names,
         "pr_auc": float(pr_auc),
         "roc_auc": float(roc_auc),
@@ -465,6 +489,7 @@ def train_all_models_advanced(
     joblib.dump(
         {
             "model": xgb_result["model"],
+            "imputer": xgb_result["imputer"],
             "feature_names": xgb_result["feature_names"],
             "techniques": xgb_result["techniques"],
         },
@@ -490,6 +515,7 @@ def train_all_models_advanced(
         joblib.dump(
             {
                 "model": lgbm_result["model"],
+                "imputer": lgbm_result["imputer"],
                 "feature_names": lgbm_result["feature_names"],
                 "techniques": lgbm_result["techniques"],
             },

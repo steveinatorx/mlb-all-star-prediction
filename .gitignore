@@ -79,6 +79,10 @@ BLOG_NOTES.md
 # Blog post outlines (draft content)
 docs/blog_series/
 
+# Blog-related reports (draft content)
+docs/IMBALANCED_DATA_REPORT.md
+docs/EVALUATION_METRICS_EXPLANATION.md
+
 # Distribution
 dist/
 build/
