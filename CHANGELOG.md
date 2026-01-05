@@ -34,6 +34,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-05
+
+### Added
+- **SHAP Plots with Interaction Features**: Regenerated SHAP plots for models trained with interaction features
+  - XGBoost, LightGBM, Random Forest SHAP plots with 10 interaction features
+  - Shows which interaction features are most important
+  - Plots saved as `shap_*_advanced.png` to distinguish from baseline plots
+
+### Changed
+- **Evaluation Pipeline**: Fixed to handle `_advanced` suffix in model names for SHAP plot generation
+- **Documentation**: Added analysis of SHAP plot differences between Random Forest and XGBoost/LightGBM
+  - Documented that Random Forest SHAP plots look significantly different
+  - Explained technical differences (3D vs 2D SHAP values)
+  - Connected differences to performance results (RF decreased, XGB/LGB improved)
+  - Key insight: Different SHAP plots reflect different feature usage patterns
+
+### Fixed
+- SHAP plot generation now works correctly for models with `_advanced` suffix
+- Feature alignment improved for SHAP calculation with interaction features
+
 ## [0.4.0] - 2026-01-05
 
 ### Added
