@@ -34,6 +34,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-01-05
+
+### Added
+- **Feature Interactions**: Comprehensive interaction feature engineering and analysis
+  - `src/analyze_shap_interactions.py`: SHAP-based interaction analysis module
+  - `src/create_interaction_features.py`: Feature engineering for interactions
+  - 10 interaction features created (K/BB ratios, ERA×WHIP products, consistency metrics)
+  - CLI commands: `analyze-interactions`, `add-interactions`
+- **Enhanced SHAP Visualization**:
+  - Waterfall plots for individual predictions (top 5)
+  - Dependence plots for feature interactions (top 5 features)
+  - Saved to `reports/figures/shap_waterfalls/` and `shap_dependence/`
+- **Performance Analysis**: Comprehensive comparison of models with vs without interaction features
+  - XGBoost: +16.2% PR-AUC improvement with interactions
+  - LightGBM: +39.6% PR-AUC improvement with interactions
+  - Documentation: `docs/evaluation/INTERACTION_FEATURES_RESULTS.md`
+
+### Changed
+- **Documentation Organization**: Reorganized docs into logical subdirectories
+  - `docs/evaluation/`: Evaluation metrics, ranking vs binary, interaction results
+  - `docs/interpretability/`: SHAP analysis guide
+  - `docs/training/`: Model training plans and strategies
+  - `docs/data/`: Data sources, enrichment, expansion opportunities
+  - `docs/archive/`: Archived research notes and outdated scraping docs
+  - `docs/ROADMAP.md`: Kept at root level
+- **README**: Updated to reflect current project state
+  - Added advanced training techniques
+  - Added feature interactions section
+  - Updated model performance metrics
+  - Removed outdated references
+- **Branch Migration**: Moved primary branch from `master` to `main`
+
+### Performance
+- **Best Model**: XGBoost with interaction features
+  - Validation PR-AUC: 0.1099 (+16.2% improvement)
+  - Best overall performance achieved
+
+### Documentation
+- Created comprehensive interaction features analysis document
+- Updated all documentation links to reflect new organization
+- Archived outdated research notes and scraping documentation
+
 ## [0.3.5] - 2026-01-05
 
 ### Added
